@@ -128,16 +128,21 @@ Important build-graph detail:
 
 ## Graphics Backend Policy
 
+`third-party/aosp/` is the source of truth for the guest image and its launch
+defaults.
+
 The image is intentionally launch-selectable:
 
-- this no-GPU build machine validates with software rendering
-- GPU-capable hosts should be able to launch the same built image with virgl or
-  gfxstream
-- the product does not hardcode a single read-only EGL backend into the source
-  tree
+- the Phase 2 guest Vulkan target is `androidboot.hardware.vulkan=ranchu`
+- `pastel` remains the SwiftShader-backed fallback we are moving away from
+- GPU-capable hosts are expected to pair this image with a
+  gfxstream/rutabaga-capable QEMU path
+- software-rendered fallback validation is still possible when the host does
+  not yet expose gfxstream/rutabaga at runtime
 
 Runtime graphics selection is done later by `scripts/run_plain_qemu.sh` through
-`androidboot.hardware.*` boot properties.
+`androidboot.hardware.*` boot properties, with `ranchu` as the default Vulkan
+HAL.
 
 ## Stage After Build
 
@@ -178,6 +183,8 @@ Supporting staged artifacts are also kept:
 - `plain-qemu/misc.img`
 - `plain-qemu/frp.img`
 - `plain-qemu/metadata.img`
+- `plain-qemu/generic_ramdisk.img`
+- `plain-qemu/combined_ramdisk.img`
 - `plain-qemu/vendor_ramdisk.lz4`
 - `plain-qemu/vendor_bootconfig.txt`
 

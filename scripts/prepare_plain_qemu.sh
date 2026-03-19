@@ -88,24 +88,32 @@ for file in \
   require_file "$file"
 done
 
-mkdir -p "$STAGE"/unpack/boot "$STAGE"/unpack/vendor_boot
+mkdir -p "$STAGE"/unpack/boot "$STAGE"/unpack/init_boot "$STAGE"/unpack/vendor_boot
 
 "$UNPACK_BOOTIMG" --boot_img "$OUT/boot.img" --out "$STAGE/unpack/boot"
+"$UNPACK_BOOTIMG" --boot_img "$OUT/init_boot.img" --out "$STAGE/unpack/init_boot"
 "$UNPACK_BOOTIMG" --boot_img "$OUT/vendor_boot.img" --out "$STAGE/unpack/vendor_boot"
 
 vendor_ramdisk_path=$(first_existing \
   "$STAGE/unpack/vendor_boot/vendor_ramdisk00" \
   "$STAGE/unpack/vendor_boot/vendor_ramdisk")
 require_file "$vendor_ramdisk_path"
+generic_ramdisk_path=$(first_existing \
+  "$STAGE/unpack/init_boot/ramdisk")
+require_file "$generic_ramdisk_path"
 
 cp "$STAGE/unpack/boot/kernel" "$STAGE/kernel"
 cp "$vendor_ramdisk_path" "$STAGE/vendor_ramdisk.lz4"
+cp "$generic_ramdisk_path" "$STAGE/generic_ramdisk.img"
 cp "$STAGE/unpack/vendor_boot/bootconfig" "$STAGE/vendor_bootconfig.txt"
 cp "$STAGE/unpack/vendor_boot/dtb" "$STAGE/dtb.img"
+cat "$STAGE/vendor_ramdisk.lz4" "$STAGE/generic_ramdisk.img" >"$STAGE/combined_ramdisk.img"
 
 for file in \
   "$STAGE/kernel" \
   "$STAGE/vendor_ramdisk.lz4" \
+  "$STAGE/generic_ramdisk.img" \
+  "$STAGE/combined_ramdisk.img" \
   "$STAGE/vendor_bootconfig.txt" \
   "$STAGE/dtb.img"; do
   require_file "$file"
@@ -120,17 +128,34 @@ truncate -s 64M "$STAGE/metadata.img"
 "$MKE2FS" -q -t ext4 -F "$STAGE/metadata.img"
 
 cat >"$STAGE/bootconfig.extra.txt" <<'EOF'
+androidboot.hardware=cutf_cvm
+androidboot.serialno=CUTTLEFISHCVD01
+androidboot.lcd_density=320
+androidboot.setupwizard_mode=OPTIONAL
+androidboot.selinux=permissive
+androidboot.verifiedbootstate=orange
+androidboot.vbmeta.device=PARTUUID=unknown
+androidboot.vbmeta.avb_version=1.1
+androidboot.vbmeta.device_state=unlocked
+androidboot.vbmeta.hash_alg=sha256
+androidboot.vbmeta.size=4416
+androidboot.vbmeta.digest=0000000000000000000000000000000000000000000000000000000000000000
 androidboot.slot_suffix=_a
 androidboot.force_normal_boot=1
-androidboot.verifiedbootstate=orange
 androidboot.fstab_suffix=cf.f2fs.hctr2
 androidboot.boot_devices=4010000000.pcie
 androidboot.serialconsole=0
+androidboot.openthread_node_id=1
+androidboot.vsock_lights_cid=3
+androidboot.vsock_lights_port=6900
+androidboot.vendor.apex.com.android.hardware.keymint=com.android.hardware.keymint.rust_nonsecure
+androidboot.vendor.apex.com.android.hardware.gatekeeper=com.android.hardware.gatekeeper.nonsecure
+androidboot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu
 EOF
 
 cat "$STAGE/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$STAGE/bootconfig.combined.txt"
 
-python3 - "$STAGE/vendor_ramdisk.lz4" "$STAGE/bootconfig.combined.txt" "$STAGE/initrd.img" <<'PY'
+python3 - "$STAGE/combined_ramdisk.img" "$STAGE/bootconfig.combined.txt" "$STAGE/initrd.img" <<'PY'
 import pathlib
 import struct
 import sys
@@ -258,6 +283,8 @@ Bootable QEMU artifact:
 Supporting staged artifacts:
   $STAGE/super.raw
   $STAGE/userdata.raw
+  $STAGE/combined_ramdisk.img
+  $STAGE/generic_ramdisk.img
 EOF
 
 echo "prepared plain-QEMU bundle in $STAGE"

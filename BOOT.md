@@ -42,6 +42,7 @@ Validated on `2026-03-19` with the current `plain-qemu/` bundle:
   - `ro.hardware.egl=angle`
   - `ro.hardware.gralloc=minigbm`
   - `ro.hardware.hwcomposer=ranchu`
+  - `ro.hardware.vulkan=ranchu`
 
 Validated command results:
 
@@ -90,11 +91,12 @@ The prep script consumes these compiled build outputs:
 
 The prep script does all of the following:
 
-- unpacks `boot.img` and `vendor_boot.img`
-- extracts the kernel, vendor ramdisk, DTB, and vendor bootconfig
+- unpacks `boot.img`, `init_boot.img`, and `vendor_boot.img`
+- extracts the kernel, vendor ramdisk, generic ramdisk, DTB, and vendor bootconfig
 - converts `super.img` and `userdata.img` from sparse to raw
 - creates blank `misc.img` and `frp.img`
 - creates a formatted `metadata.img`
+- concatenates the vendor and generic ramdisks into `combined_ramdisk.img`
 - appends extra bootconfig entries to the vendor bootconfig
 - emits `initrd.img`
 - assembles a single GPT disk image as `os-disk.raw`
@@ -120,6 +122,11 @@ The retained `vendor_ramdisk.lz4` and `vendor_bootconfig.txt` matter because
 `scripts/run_plain_qemu.sh` rebuilds `initrd.img` at launch time when you
 override `QEMU_BOOT_*` environment variables.
 
+The retained `generic_ramdisk.img` and `combined_ramdisk.img` matter because
+Cuttlefish needs the generic ramdisk from `init_boot.img` in addition to the
+vendor ramdisk from `vendor_boot.img`; dropping it reproduces the early
+recovery-style boot loop.
+
 If the compiled output directory or staging directory differs, override them:
 
 ```bash
@@ -129,7 +136,20 @@ STAGE=/path/to/plain-qemu \
 ./scripts/prepare_plain_qemu.sh
 ```
 
-## Step 2: Boot On This No-GPU Server With Software GL
+## Step 2: Boot With `ranchu` As The Guest Vulkan Default
+
+`third-party/aosp/` owns the guest-image side of the graphics stack.
+
+Current Phase 2 policy:
+
+- the primary guest Vulkan HAL is `ranchu`
+- `pastel` is the legacy SwiftShader-backed fallback
+- the intended accelerated host pairing is a gfxstream/rutabaga-capable QEMU
+  path
+- if the host cannot provide that path yet, software-rendered bring-up is still
+  useful for validating the guest image and boot flow
+
+## Step 3: Boot On This No-GPU Server With Software GL
 
 This server does not have a physical GPU. The validated path here uses:
 
@@ -158,7 +178,7 @@ xvfb-run -a env \
   QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE=client \
   QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE=drm \
   QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT=rgba \
-  QEMU_BOOT_HARDWARE_VULKAN=pastel \
+  QEMU_BOOT_HARDWARE_VULKAN=ranchu \
   ./scripts/run_plain_qemu.sh
 ```
 
@@ -172,7 +192,7 @@ Important details:
 - if `6530` is already in use, pick another free host port and use the same
   value consistently in the `adb` commands below
 
-## Step 3: Wait For ADB And Boot Completion
+## Step 4: Wait For ADB And Boot Completion
 
 Use the AOSP-built `adb` binary:
 
@@ -203,7 +223,7 @@ Typical progression on this image:
 - first boot spends time in APEX decompression and `cppreopts`
 - the final target state should become `device`
 
-## Step 4: Useful Post-Boot Checks
+## Step 5: Useful Post-Boot Checks
 
 Once `adb` is online, these checks are useful:
 
@@ -211,6 +231,7 @@ Once `adb` is online, these checks are useful:
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.egl
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.gralloc
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.hwcomposer
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.vulkan
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell ls -l /dev/dri
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell readlink -f /sys/class/drm/card0/device/driver
 ```
@@ -221,6 +242,7 @@ On the validated run, the graphics properties were:
 ro.hardware.egl=angle
 ro.hardware.gralloc=minigbm
 ro.hardware.hwcomposer=ranchu
+ro.hardware.vulkan=ranchu
 ```
 
 ## Known Blockers Already Fixed

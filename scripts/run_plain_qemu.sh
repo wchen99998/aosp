@@ -25,10 +25,11 @@ QEMU_BOOT_HARDWARE_HWCOMPOSER=${QEMU_BOOT_HARDWARE_HWCOMPOSER:-ranchu}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE=${QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE:-client}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE=${QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE:-drm}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT=${QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT:-rgba}
-QEMU_BOOT_HARDWARE_VULKAN=${QEMU_BOOT_HARDWARE_VULKAN:-pastel}
+QEMU_BOOT_HARDWARE_VULKAN=${QEMU_BOOT_HARDWARE_VULKAN:-ranchu}
 QEMU_BOOT_LCD_DENSITY=${QEMU_BOOT_LCD_DENSITY:-320}
 QEMU_BOOT_OPENGLES_VERSION=${QEMU_BOOT_OPENGLES_VERSION:-196609}
 QEMU_BOOT_HARDWARE_GLTRANSPORT=${QEMU_BOOT_HARDWARE_GLTRANSPORT:-}
+QEMU_RUN_DIR=${QEMU_RUN_DIR:-$STAGE/run-$(date +%Y%m%d-%H%M%S)}
 
 require_file() {
   local path=$1
@@ -68,19 +69,38 @@ if [[ -n "$QEMU_BOOT_HARDWARE_GLTRANSPORT" ]]; then
   CMDLINE+=" androidboot.hardware.gltransport=${QEMU_BOOT_HARDWARE_GLTRANSPORT}"
 fi
 INITRD="$STAGE/initrd.img"
-TMPDIR_QEMU=
+mkdir -p "$QEMU_RUN_DIR"
 
 if [[ -f "$STAGE/vendor_ramdisk.lz4" && -f "$STAGE/vendor_bootconfig.txt" ]]; then
-  TMPDIR_QEMU=$(mktemp -d "${TMPDIR:-/tmp}/plain-qemu.XXXXXX")
-  trap '[[ -n "$TMPDIR_QEMU" ]] && rm -rf "$TMPDIR_QEMU"' EXIT
+  RAMDISK_BASE="$STAGE/combined_ramdisk.img"
+  if [[ ! -f "$RAMDISK_BASE" && -f "$STAGE/generic_ramdisk.img" ]]; then
+    RAMDISK_BASE="$QEMU_RUN_DIR/combined_ramdisk.img"
+    cat "$STAGE/vendor_ramdisk.lz4" "$STAGE/generic_ramdisk.img" >"$RAMDISK_BASE"
+  elif [[ ! -f "$RAMDISK_BASE" ]]; then
+    RAMDISK_BASE="$STAGE/vendor_ramdisk.lz4"
+  fi
 
-  cat >"$TMPDIR_QEMU/bootconfig.extra.txt" <<EOF
+  cat >"$QEMU_RUN_DIR/bootconfig.extra.txt" <<EOF
+androidboot.hardware=cutf_cvm
+androidboot.serialno=CUTTLEFISHCVD01
+androidboot.lcd_density=${QEMU_BOOT_LCD_DENSITY}
+androidboot.setupwizard_mode=OPTIONAL
+androidboot.selinux=permissive
+androidboot.verifiedbootstate=${QEMU_BOOT_VERIFIEDBOOTSTATE}
+androidboot.vbmeta.device=PARTUUID=unknown
+androidboot.vbmeta.avb_version=1.1
+androidboot.vbmeta.device_state=unlocked
+androidboot.vbmeta.hash_alg=sha256
+androidboot.vbmeta.size=4416
+androidboot.vbmeta.digest=0000000000000000000000000000000000000000000000000000000000000000
 androidboot.slot_suffix=${QEMU_BOOT_SLOT_SUFFIX}
 androidboot.force_normal_boot=${QEMU_BOOT_FORCE_NORMAL_BOOT}
-androidboot.verifiedbootstate=${QEMU_BOOT_VERIFIEDBOOTSTATE}
 androidboot.fstab_suffix=${QEMU_BOOT_FSTAB_SUFFIX}
 androidboot.boot_devices=${QEMU_BOOT_BOOT_DEVICES}
 androidboot.serialconsole=${QEMU_BOOT_SERIALCONSOLE}
+androidboot.openthread_node_id=1
+androidboot.vsock_lights_cid=3
+androidboot.vsock_lights_port=6900
 androidboot.cpuvulkan.version=${QEMU_BOOT_CPUVULKAN_VERSION}
 androidboot.hardware.gralloc=${QEMU_BOOT_HARDWARE_GRALLOC}
 androidboot.hardware.hwcomposer=${QEMU_BOOT_HARDWARE_HWCOMPOSER}
@@ -90,19 +110,22 @@ androidboot.hardware.hwcomposer.display_framebuffer_format=${QEMU_BOOT_HARDWARE_
 androidboot.hardware.egl=${QEMU_BOOT_HARDWARE_EGL}
 androidboot.lcd_density=${QEMU_BOOT_LCD_DENSITY}
 androidboot.opengles.version=${QEMU_BOOT_OPENGLES_VERSION}
+androidboot.vendor.apex.com.android.hardware.keymint=com.android.hardware.keymint.rust_nonsecure
+androidboot.vendor.apex.com.android.hardware.gatekeeper=com.android.hardware.gatekeeper.nonsecure
+androidboot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu
 EOF
 
   if [[ -n "$QEMU_BOOT_HARDWARE_VULKAN" ]]; then
-    echo "androidboot.hardware.vulkan=${QEMU_BOOT_HARDWARE_VULKAN}" >>"$TMPDIR_QEMU/bootconfig.extra.txt"
+    echo "androidboot.hardware.vulkan=${QEMU_BOOT_HARDWARE_VULKAN}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
   fi
 
   if [[ -n "$QEMU_BOOT_HARDWARE_GLTRANSPORT" ]]; then
-    echo "androidboot.hardware.gltransport=${QEMU_BOOT_HARDWARE_GLTRANSPORT}" >>"$TMPDIR_QEMU/bootconfig.extra.txt"
+    echo "androidboot.hardware.gltransport=${QEMU_BOOT_HARDWARE_GLTRANSPORT}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
   fi
 
-  cat "$TMPDIR_QEMU/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$TMPDIR_QEMU/bootconfig.combined.txt"
+  cat "$QEMU_RUN_DIR/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$QEMU_RUN_DIR/bootconfig.combined.txt"
 
-  python3 - "$STAGE/vendor_ramdisk.lz4" "$TMPDIR_QEMU/bootconfig.combined.txt" "$TMPDIR_QEMU/initrd.img" <<'PY'
+  python3 - "$RAMDISK_BASE" "$QEMU_RUN_DIR/bootconfig.combined.txt" "$QEMU_RUN_DIR/initrd.img" <<'PY'
 import pathlib
 import struct
 import sys
@@ -119,7 +142,7 @@ with open(sys.argv[3], "wb") as f:
     f.write(b"#BOOTCONFIG\n")
 PY
 
-  INITRD="$TMPDIR_QEMU/initrd.img"
+  INITRD="$QEMU_RUN_DIR/initrd.img"
 fi
 
 args=(

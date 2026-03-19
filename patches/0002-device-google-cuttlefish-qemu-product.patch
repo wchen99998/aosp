@@ -228,10 +228,11 @@ index 0000000..e8d9bb4
 +    ro.cuttlefish.guest_adb_port=5555
 +
 +# ---------------------------------------------------------------------------
-+# Graphics: do not bake in a read-only backend choice here. The actual guest
-+# graphics backend is selected at launch time via androidboot.hardware.* so the
-+# same image can be used with software rendering, virgl, or gfxstream-capable
-+# hosts.
++# Graphics: keep the stock cuttlefish guest HAL packaging and select the active
++# backend at launch time via androidboot.hardware.*. The Phase 2 mainline path
++# now targets the ranchu Vulkan HAL paired with a gfxstream/rutabaga-capable
++# host, while still allowing software-rendered fallback validation when the
++# host GPU path is unavailable.
 +# ---------------------------------------------------------------------------
 +# ---------------------------------------------------------------------------
 +# Additional QEMU init adjustments layered on top of stock cuttlefish init
