@@ -5,58 +5,41 @@
 - Root workspace: `/home/azureuser/aosp`
 - Source tree: `/home/azureuser/aosp/src`
 - Product output: `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
+- Staged no-harness bundle: `/home/azureuser/aosp/plain-qemu`
 
 Important path detail:
 
-- even though the lunch target is `aosp_cf_arm64_only_phone_qemu`, the built
-  artifact directory used by the workspace scripts is still
+- even though the lunch target is `aosp_cf_arm64_only_phone_qemu`, the build
+  output directory used by the scripts is still
   `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
-
-## Product
-
-The build target is:
-
-```bash
-cd /home/azureuser/aosp/src
-source build/envsetup.sh
-lunch aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
-```
-
-That lunch target resolves to:
-
-- `TARGET_PRODUCT=aosp_cf_arm64_only_phone_qemu`
-- `TARGET_ARCH=arm64`
-
-Important naming detail:
-
-- `aosp_cf_arm64_only_phone_qemu` is the built product in `src/`
-- `plain-qemu/` is only the staged no-harness runtime bundle created later by
-  the workspace scripts
-- `plain-qemu` is not a second lunch flavor
+- `plain-qemu/` is a staged runtime bundle created after the build; it is not a
+  second lunch flavor
 
 ## Host Prerequisites
 
-Required to build:
+Required to build in this workspace:
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y rsync
 ```
 
-Required to stage and validate the built image in this workspace:
+Required to stage and validate the built image here:
 
 ```bash
-sudo apt-get install -y e2fsprogs gdisk f2fs-tools xvfb
+sudo apt-get install -y e2fsprogs gdisk f2fs-tools qemu-system-arm xvfb
 ```
 
 Notes:
 
 - `rsync` was required by the AOSP build and its absence caused an earlier
-  failure
+  build failure
 - `mke2fs` and `sgdisk` are used by `scripts/prepare_plain_qemu.sh`
-- `xvfb` is used only for the no-GPU software-rendered runtime validation
+- `qemu-system-aarch64` is provided by the Ubuntu `qemu-system-arm` package
+- `adb` is taken from the AOSP host tools under
+  `/home/azureuser/aosp/src/out/host/linux-x86/bin/adb`
 
-## Build Command
+## Build Target
 
 Run from `/home/azureuser/aosp/src`:
 
@@ -66,56 +49,95 @@ lunch aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
 m -j$(nproc)
 ```
 
-The current image build completed successfully.
+That lunch target resolves to:
 
-## Source Changes In `src/`
+- `TARGET_PRODUCT=aosp_cf_arm64_only_phone_qemu`
+- `TARGET_ARCH=arm64`
 
-The tracked source changes live under `src/device/google/cuttlefish` and are
-exported in `/home/azureuser/aosp/patches/0001-cuttlefish-qemu.patch`.
+## Current Build And Validation Status
+
+- the latest compile completed successfully on `2026-03-19`
+- the latest `plain-qemu/` bundle was restaged from that build on
+  `2026-03-19`
+- direct plain-QEMU boot without `launch_cvd` or `run_cvd` was validated on
+  `2026-03-19`
+- software-GL validation on this no-GPU machine reached `adb device`
+- the validated live ADB endpoint is `127.0.0.1:6530`
+- `adb -s 127.0.0.1:6530 get-state` returned `device`
+- `adb -s 127.0.0.1:6530 shell getprop sys.boot_completed` returned `1`
+- validated fingerprint:
+  `generic/aosp_cf_arm64_only_phone_qemu/vsoc_arm64_only:Baklava/MAIN/eng.azureu:userdebug/test-keys`
+- validated FRP block device:
+  `/dev/block/by-name/frp -> /dev/block/vda2`
+
+## Active Source Changes In `src/`
+
+The active source changes are under:
+
+- `/home/azureuser/aosp/src/build/make`
+- `/home/azureuser/aosp/src/device/google/cuttlefish`
 
 High-level changes:
 
-- `AndroidProducts.mk`
+- `build/make/target/product/handheld_system.mk`
+  - gates Bluetooth packages on `BOARD_HAVE_BLUETOOTH`
+  - gates telephony packages on `TARGET_NO_TELEPHONY`
+- `build/make/target/product/telephony_system_ext.mk`
+  - gates `system_ext` telephony packages on `TARGET_NO_TELEPHONY`
+- `device/google/cuttlefish/AndroidProducts.mk`
   - adds the `aosp_cf_arm64_only_phone_qemu` lunch product
-- `vsoc_arm64_only/phone/aosp_cf_qemu.mk`
+- `device/google/cuttlefish/vsoc_arm64_only/phone/aosp_cf_qemu.mk`
   - inherits the stock arm64-only phone product
-  - keeps Gatekeeper and KeyMint on nonsecure in-guest implementations
+  - keeps in-guest nonsecure KeyMint and Gatekeeper
   - keeps the ranchu graphics composer
-  - disables the light HAL and Thread network pieces for this QEMU product
-  - adds QEMU-specific metadata
-  - does not bake a fixed graphics backend into read-only properties
-- `shared/device.mk`
-  - gates light and Thread network package inclusion so the QEMU child product
-    can disable them cleanly
-- `shared/phone/device_vendor.mk`
-  - keeps virgl packaging available by default so the same built image can be
-    used on other machines with virgl-capable hosts
-- `shared/config/qemu/init.vendor.qemu.rc`
-  - layers a small QEMU-specific init fragment on top of stock cuttlefish init
+  - disables the light HAL and Thread networking
+  - switches ADB transport to raw TCP on guest port `5555`
+  - adds QEMU-specific metadata properties
+  - layers in the QEMU init fragment
+  - keeps Bluetooth and telephony enabled in the current tree
+- `device/google/cuttlefish/shared/device.mk`
+  - makes Gatekeeper and KeyMint package selection overridable by child products
+  - gates some telephony-adjacent packages on `TARGET_NO_TELEPHONY`
+  - gates Thread packages on `LOCAL_ENABLE_THREADNETWORK`
+- `device/google/cuttlefish/shared/config/qemu/init.vendor.qemu.rc`
+  - adds a small QEMU-only init fragment
   - stops `socket_vsock_proxy`
   - stops `setup_wifi` and `init_wifi_sh`
-  - brings `eth0` up directly
+  - brings `eth0` up directly in `post-fs-data`
+- `device/google/cuttlefish/shared/config/qemu/Android.bp`
+  - installs the QEMU init fragment as vendor init file `init.qemu.rc`
+- `device/google/cuttlefish/shared/graphics/device_vendor.mk`
+  - makes graphics composer package selection overridable by child products
+- `device/google/cuttlefish/shared/phone/device_vendor.mk`
+  - makes virgl inclusion optional through `LOCAL_ENABLE_VIRGL`
+
+Important current-tree note:
+
+- the current validated build does not use a QEMU-specific audio-policy module
+- stale experimental QEMU audio-policy leftovers were removed before the latest
+  rebuild
 
 Important build-graph detail:
 
-- the stock `init.cutf_cvm.rc` is not replaced
-- a separate QEMU init fragment is installed instead
-- replacing the stock prebuilt caused an install-path conflict during the build
+- the stock `init.cutf_cvm.rc` is not replaced in-place
+- the QEMU flavor adds a separate `init.qemu.rc` fragment instead
+- trying to replace the stock `prebuilt_etc` directly caused an install-path
+  conflict during earlier build attempts
 
 ## Graphics Backend Policy
 
-The built image is intentionally launch-selectable:
+The image is intentionally launch-selectable:
 
-- software-rendered validation on this no-GPU server uses
-  `androidboot.hardware.egl=angle` and `androidboot.hardware.vulkan=pastel`
-- virgl-capable runtime hosts can launch the same image with a different QEMU
-  GPU device and different `androidboot.hardware.*` values
-- the source tree does not hardcode `ro.hardware.egl=mesa` anymore
+- this no-GPU build machine validates with software rendering
+- GPU-capable hosts should be able to launch the same built image with virgl or
+  gfxstream
+- the product does not hardcode a single read-only EGL backend into the source
+  tree
 
-That is why the build product is still `aosp_cf_arm64_only_phone_qemu`, while
-the runtime choice is made later by `scripts/run_plain_qemu.sh`.
+Runtime graphics selection is done later by `scripts/run_plain_qemu.sh` through
+`androidboot.hardware.*` boot properties.
 
-## After Build
+## Stage After Build
 
 After a successful build:
 
@@ -123,8 +145,6 @@ After a successful build:
 cd /home/azureuser/aosp
 ./scripts/prepare_plain_qemu.sh
 ```
-
-Then follow `/home/azureuser/aosp/BOOT.md`.
 
 The prep script consumes these compiled outputs from the product directory:
 
@@ -138,24 +158,50 @@ The prep script consumes these compiled outputs from the product directory:
 - `vbmeta_vendor_dlkm.img`
 - `vbmeta_system_dlkm.img`
 
-The resulting bootable QEMU artifact is not a single file. It is the bundle:
+It produces the staged no-harness bundle:
 
 - `plain-qemu/kernel`
 - `plain-qemu/initrd.img`
 - `plain-qemu/os-disk.raw`
+- `plain-qemu/kernel.cmdline`
 
-with `plain-qemu/kernel.cmdline` providing the default kernel command line.
+Supporting staged artifacts are also kept:
 
-If needed, the scripts can target another compiled output directory:
+- `plain-qemu/super.raw`
+- `plain-qemu/userdata.raw`
+- `plain-qemu/misc.img`
+- `plain-qemu/frp.img`
+- `plain-qemu/metadata.img`
+- `plain-qemu/vendor_ramdisk.lz4`
+- `plain-qemu/vendor_bootconfig.txt`
+
+If needed, the scripts can target another compiled output directory or another
+staging directory:
 
 ```bash
 cd /home/azureuser/aosp
-OUT=/path/to/out/target/product/vsoc_arm64_only ./scripts/prepare_plain_qemu.sh
+OUT=/path/to/out/target/product/vsoc_arm64_only \
+STAGE=/path/to/plain-qemu \
+./scripts/prepare_plain_qemu.sh
 ```
 
-Consistency rule:
+## Current Runtime Notes
 
-- restage only from a consistent image set
-- if `super.img` changes, keep the matching `vbmeta*` images from the same
-  build
-- then rerun `./scripts/prepare_plain_qemu.sh`
+The current validated no-harness boot is usable, but first boot is not quiet.
+
+Observed behavior on the successful `2026-03-19` validation:
+
+- first boot spends noticeable time in APEX decompression and `cppreopts`
+- host `adb` can briefly show `offline` before it settles to `device`
+- `SurfaceFlinger`, `bootanim`, `system_server`, and PackageManager all come up
+- the guest reaches `sys.boot_completed=1`
+
+Observed non-blocking runtime issues on that validated boot:
+
+- `com.android.nfc` aborts and restarts after NFC HAL command timeouts
+- `com.android.bluetooth` also aborts and restarts later in boot
+- `audioserver` repeatedly tries to start lazy `aidl/activity`
+- these issues did not prevent `adb device` or `sys.boot_completed=1`
+
+See `/home/azureuser/aosp/BOOT.md` for the exact no-harness boot flow and the
+validated launch command.

@@ -11,10 +11,36 @@ index 047cc45..b08d5d4 100644
  	aosp_cf_arm64_only_phone_hwasan:$(LOCAL_DIR)/vsoc_arm64_only/phone/aosp_cf_hwasan.mk \
  	aosp_cf_arm64_minidroid:$(LOCAL_DIR)/vsoc_arm64_minidroid/aosp_cf.mk \
 diff --git a/shared/device.mk b/shared/device.mk
-index 9a49abd..8ccaeb8 100644
+index 9a49abd..9f544c0 100644
 --- a/shared/device.mk
 +++ b/shared/device.mk
-@@ -378,9 +378,13 @@ PRODUCT_PACKAGES += $(LOCAL_DUMPSTATE_PRODUCT_PACKAGE)
+@@ -181,6 +181,7 @@ PRODUCT_PACKAGES += \
+ #
+ # Package for AOSP QNS
+ #
++ifneq ($(TARGET_NO_TELEPHONY),true)
+ PRODUCT_PACKAGES += \
+     QualifiedNetworksService
+ 
+@@ -189,6 +190,7 @@ PRODUCT_PACKAGES += \
+ #
+ PRODUCT_PACKAGES += \
+     GbaService
++endif
+ 
+ #
+ # Packages for testing
+@@ -209,7 +211,9 @@ PRODUCT_PACKAGES += \
+ #
+ # Satellite vendor service for CF
+ #
++ifneq ($(TARGET_NO_TELEPHONY),true)
+ PRODUCT_PACKAGES += CFSatelliteService
++endif
+ 
+ # PRODUCT_AAPT_CONFIG and PRODUCT_AAPT_PREF_CONFIG are intentionally not set to
+ # pick up every density resources.
+@@ -378,9 +382,13 @@ PRODUCT_PACKAGES += $(LOCAL_DUMPSTATE_PRODUCT_PACKAGE)
  #
  # Gatekeeper
  #
@@ -30,7 +56,7 @@ index 9a49abd..8ccaeb8 100644
  
  #
  # Oemlock
-@@ -446,10 +450,14 @@ endif
+@@ -446,10 +454,14 @@ endif
  #
  # KeyMint HAL
  #
@@ -48,7 +74,7 @@ index 9a49abd..8ccaeb8 100644
  
  # Indicate that KeyMint includes support for the ATTEST_KEY key purpose.
  PRODUCT_COPY_FILES += \
-@@ -604,9 +612,12 @@ PRODUCT_PACKAGES += \
+@@ -604,9 +616,12 @@ PRODUCT_PACKAGES += \
  $(call soong_config_set_bool,cuttlefish_config,use_pci_ids,true)
  
  # Thread Network AIDL HAL and Demo App
@@ -96,6 +122,58 @@ index 678c640..a6cb1b8 100644
  $(call inherit-product, device/google/cuttlefish/shared/device.mk)
  
  # Loads the camera HAL and which set of cameras is required.
+diff --git a/shared/config/qemu/Android.bp b/shared/config/qemu/Android.bp
+new file mode 100644
+index 0000000..b2e9384
+--- /dev/null
++++ b/shared/config/qemu/Android.bp
+@@ -0,0 +1,26 @@
++//
++// Copyright (C) 2024 The Android Open Source Project
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package {
++    default_applicable_licenses: ["Android-Apache-2.0"],
++}
++
++prebuilt_etc {
++    name: "device_google_cuttlefish_qemu_config_init_vendor_rc",
++    srcs: ["init.vendor.qemu.rc"],
++    dsts: ["init.qemu.rc"],
++    vendor: true,
++    relative_install_path: "init",
++}
+diff --git a/shared/config/qemu/init.vendor.qemu.rc b/shared/config/qemu/init.vendor.qemu.rc
+new file mode 100644
+index 0000000..e7a9644
+--- /dev/null
++++ b/shared/config/qemu/init.vendor.qemu.rc
+@@ -0,0 +1,14 @@
++# QEMU-specific init deltas layered on top of init.cutf_cvm.rc.
++#
++# This file intentionally avoids replacing the stock cuttlefish init module,
++# which causes an install-path conflict during the build. The goal here is to
++# keep the build graph valid while applying a few runtime adjustments that are
++# harmless if the corresponding services are absent.
++
++on post-fs-data
++    stop setup_wifi
++    stop init_wifi_sh
++    exec -- /system/bin/ip link set eth0 up
++
++on boot
++    stop socket_vsock_proxy
 diff --git a/vsoc_arm64_only/phone/aosp_cf_qemu.mk b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
 new file mode 100644
 index 0000000..e8d9bb4
@@ -160,55 +238,3 @@ index 0000000..e8d9bb4
 +# ---------------------------------------------------------------------------
 +PRODUCT_PACKAGES += \
 +    device_google_cuttlefish_qemu_config_init_vendor_rc
-diff --git a/shared/config/qemu/Android.bp b/shared/config/qemu/Android.bp
-new file mode 100644
-index 0000000..b2e9384
---- /dev/null
-+++ b/shared/config/qemu/Android.bp
-@@ -0,0 +1,26 @@
-+//
-+// Copyright (C) 2024 The Android Open Source Project
-+//
-+// Licensed under the Apache License, Version 2.0 (the "License");
-+// you may not use this file except in compliance with the License.
-+// You may obtain a copy of the License at
-+//
-+//      http://www.apache.org/licenses/LICENSE-2.0
-+//
-+// Unless required by applicable law or agreed to in writing, software
-+// distributed under the License is distributed on an "AS IS" BASIS,
-+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+// See the License for the specific language governing permissions and
-+// limitations under the License.
-+
-+package {
-+    default_applicable_licenses: ["Android-Apache-2.0"],
-+}
-+
-+prebuilt_etc {
-+    name: "device_google_cuttlefish_qemu_config_init_vendor_rc",
-+    srcs: ["init.vendor.qemu.rc"],
-+    dsts: ["init.qemu.rc"],
-+    vendor: true,
-+    relative_install_path: "init",
-+}
-diff --git a/shared/config/qemu/init.vendor.qemu.rc b/shared/config/qemu/init.vendor.qemu.rc
-new file mode 100644
-index 0000000..e7a9644
---- /dev/null
-+++ b/shared/config/qemu/init.vendor.qemu.rc
-@@ -0,0 +1,14 @@
-+# QEMU-specific init deltas layered on top of init.cutf_cvm.rc.
-+#
-+# This file intentionally avoids replacing the stock cuttlefish init module,
-+# which causes an install-path conflict during the build. The goal here is to
-+# keep the build graph valid while applying a few runtime adjustments that are
-+# harmless if the corresponding services are absent.
-+
-+on post-fs-data
-+    stop setup_wifi
-+    stop init_wifi_sh
-+    exec -- /system/bin/ip link set eth0 up
-+
-+on boot
-+    stop socket_vsock_proxy

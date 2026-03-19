@@ -10,9 +10,7 @@ Naming:
 
 - built product: `aosp_cf_arm64_only_phone_qemu`
 - staged runtime bundle: `/home/azureuser/aosp/plain-qemu`
-- launcher path: `scripts/run_plain_qemu.sh`
-
-`plain-qemu` is the no-harness runtime flow, not a separate build flavor.
+- launcher path: `/home/azureuser/aosp/scripts/run_plain_qemu.sh`
 
 Important path detail:
 
@@ -22,68 +20,57 @@ Important path detail:
   output directory for the `aosp_cf_arm64_only_phone_qemu` build in this
   workspace
 
-## Current Validated Result
+No-harness requirement:
 
-Validated on this no-GPU server on 2026-03-19:
+- this flow does not use `launch_cvd`
+- this flow does not use `run_cvd`
+- the validated path uses host TCP forwarding to guest port `5555`
+- the QEMU init fragment stops `socket_vsock_proxy`
+- the QEMU init fragment also stops the Wi-Fi helper services and brings `eth0`
+  up directly
 
-- booted in plain QEMU without `launch_cvd` or `run_cvd`
+## Current Validated Status
+
+Validated on `2026-03-19` with the current `plain-qemu/` bundle:
+
+- booted directly in plain QEMU without `launch_cvd` or `run_cvd`
+- validated on this no-GPU server with software GL
+- `adb` reached `device` on `127.0.0.1:6530`
 - `sys.boot_completed=1`
-- ADB transport reached `device`
-- ADB shell worked
 - `/dev/block/by-name/frp` existed and resolved to `/dev/block/vda2`
+- runtime graphics properties matched the validated launch overrides:
+  - `ro.hardware.egl=angle`
+  - `ro.hardware.gralloc=minigbm`
+  - `ro.hardware.hwcomposer=ranchu`
 
-Validated host-side command results:
+Validated command results:
 
 ```bash
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 get-state
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb devices -l
+# 127.0.0.1:6530 device product:aosp_cf_arm64_only_phone_qemu ...
+
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 get-state
 # device
 
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop sys.boot_completed
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop sys.boot_completed
 # 1
 
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell ls -l /dev/block/by-name/frp
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.build.fingerprint
+# generic/aosp_cf_arm64_only_phone_qemu/vsoc_arm64_only:Baklava/MAIN/eng.azureu:userdebug/test-keys
+
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell ls -l /dev/block/by-name/frp
 # /dev/block/by-name/frp -> /dev/block/vda2
 ```
 
-## Why The Earlier Boot Failed
-
-The earlier raw-disk bundle was missing an `frp` GPT partition.
-
-That mattered because the product still exposes:
-
-```text
-ro.frp.pst=/dev/block/by-name/frp
-```
-
-Without that partition, `PersistentDataBlockService` timed out during boot
-phase 500 and killed `system_server`.
-
-The fix was not another image rebuild. The fix was to make
-`scripts/prepare_plain_qemu.sh` create and include:
-
-- `misc.img`
-- `frp.img`
-- `metadata.img`
-
-and assemble `frp` into `os-disk.raw`.
-
 ## Step 1: Prepare The Plain-QEMU Bundle
 
-Run:
+If you want a clean restage, remove the previous bundle first:
 
 ```bash
 cd /home/azureuser/aosp
+rm -rf plain-qemu
 ./scripts/prepare_plain_qemu.sh
 ```
-
-This stages:
-
-- `/home/azureuser/aosp/plain-qemu/kernel`
-- `/home/azureuser/aosp/plain-qemu/initrd.img`
-- `/home/azureuser/aosp/plain-qemu/os-disk.raw`
-- `/home/azureuser/aosp/plain-qemu/kernel.cmdline`
-- `/home/azureuser/aosp/plain-qemu/super.raw`
-- `/home/azureuser/aosp/plain-qemu/userdata.raw`
 
 The prep script consumes these compiled build outputs:
 
@@ -100,187 +87,252 @@ The prep script consumes these compiled build outputs:
 The prep script does all of the following:
 
 - unpacks `boot.img` and `vendor_boot.img`
-- extracts the kernel, vendor ramdisk, DTB, and bootconfig
+- extracts the kernel, vendor ramdisk, DTB, and vendor bootconfig
 - converts `super.img` and `userdata.img` from sparse to raw
 - creates blank `misc.img` and `frp.img`
-- creates `metadata.img`
-- appends bootconfig onto the vendor ramdisk to build `initrd.img`
-- assembles a single GPT disk `os-disk.raw`
+- creates a formatted `metadata.img`
+- appends extra bootconfig entries to the vendor bootconfig
+- emits `initrd.img`
+- assembles a single GPT disk image as `os-disk.raw`
 
-The actual bootable QEMU artifact is this bundle:
+The bootable QEMU bundle is:
 
 - `plain-qemu/kernel`
 - `plain-qemu/initrd.img`
 - `plain-qemu/os-disk.raw`
 
-`super.raw` and `userdata.raw` are staged intermediate/supporting artifacts,
-not the files that QEMU boots directly.
+Supporting staged artifacts are also kept:
 
-Current GPT partitions in `os-disk.raw`:
+- `plain-qemu/kernel.cmdline`
+- `plain-qemu/vendor_ramdisk.lz4`
+- `plain-qemu/vendor_bootconfig.txt`
+- `plain-qemu/super.raw`
+- `plain-qemu/userdata.raw`
+- `plain-qemu/misc.img`
+- `plain-qemu/frp.img`
+- `plain-qemu/metadata.img`
 
-- `misc`
-- `frp`
-- `boot_a`
-- `boot_b`
-- `init_boot_a`
-- `init_boot_b`
-- `vendor_boot_a`
-- `vendor_boot_b`
-- `vbmeta*`
-- `super`
-- `userdata`
-- `metadata`
+The retained `vendor_ramdisk.lz4` and `vendor_bootconfig.txt` matter because
+`scripts/run_plain_qemu.sh` rebuilds `initrd.img` at launch time when you
+override `QEMU_BOOT_*` environment variables.
 
-If the compiled output directory is somewhere else, the prep script can be
-pointed at it explicitly:
+If the compiled output directory or staging directory differs, override them:
 
 ```bash
 cd /home/azureuser/aosp
-OUT=/path/to/out/target/product/vsoc_arm64_only ./scripts/prepare_plain_qemu.sh
+OUT=/path/to/out/target/product/vsoc_arm64_only \
+STAGE=/path/to/plain-qemu \
+./scripts/prepare_plain_qemu.sh
 ```
 
-## Step 2: Boot On This No-GPU Server
+## Step 2: Boot On This No-GPU Server With Software GL
 
-This server does not have a physical GPU. The validated path here is:
+This server does not have a physical GPU. The validated path here uses:
 
-- Xvfb for a display server
-- Mesa llvmpipe on the host
-- guest software graphics selection via launch-time `androidboot.hardware.*`
+- `xvfb-run` for a temporary X display
+- Mesa `llvmpipe` on the host
+- guest graphics selection through launch-time `androidboot.hardware.*`
+  overrides
 
-Start Xvfb:
-
-```bash
-Xvfb :101 -screen 0 1280x1024x24 >/tmp/xvfb-101.log 2>&1 &
-```
-
-Launch QEMU:
+Validated launch command:
 
 ```bash
 cd /home/azureuser/aosp
-DISPLAY=:101 \
-GDK_BACKEND=x11 \
-LIBGL_ALWAYS_SOFTWARE=1 \
-GALLIUM_DRIVER=llvmpipe \
-MESA_LOADER_DRIVER_OVERRIDE=llvmpipe \
-QEMU_DISPLAY=gtk \
-QEMU_STDIO_HVC=99 \
-QEMU_HOST_ADB_PORT=6522 \
-QEMU_HVC0_FILE=/tmp/qemu-swgl-hvc0.log \
-QEMU_HVC2_FILE=/tmp/qemu-swgl-hvc2.log \
-./scripts/run_plain_qemu.sh
+xvfb-run -a env \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  GALLIUM_DRIVER=llvmpipe \
+  MESA_LOADER_DRIVER_OVERRIDE=llvmpipe \
+  QEMU_DISPLAY=gtk \
+  QEMU_GPU_DEVICE='virtio-gpu-pci,id=gpu0,xres=720,yres=1280' \
+  QEMU_HOST_ADB_PORT=6530 \
+  QEMU_STDIO_HVC=99 \
+  QEMU_HVC0_FILE=/tmp/qemu-session-hvc0.log \
+  QEMU_HVC2_FILE=/tmp/qemu-session-hvc2.log \
+  QEMU_BOOT_HARDWARE_EGL=angle \
+  QEMU_BOOT_HARDWARE_GRALLOC=minigbm \
+  QEMU_BOOT_HARDWARE_HWCOMPOSER=ranchu \
+  QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE=client \
+  QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE=drm \
+  QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT=rgba \
+  QEMU_BOOT_HARDWARE_VULKAN=pastel \
+  ./scripts/run_plain_qemu.sh
 ```
 
 Important details:
 
+- `scripts/run_plain_qemu.sh` defaults `QEMU_DISPLAY` to `none`, so set
+  `QEMU_DISPLAY=gtk` for the validated software-GL path
 - `QEMU_STDIO_HVC=99` disables stdio-backed virtconsoles, which avoids
-  background job-control stops when QEMU is daemonized or run under a terminal
-- this host's QEMU build did not support `gtk,gl=on`; plain `gtk` worked
-- `QEMU_HVC0_FILE` and `QEMU_HVC2_FILE` are the useful guest log captures
+  background job-control stops when QEMU is launched from a terminal
+- `QEMU_HVC0_FILE` and `QEMU_HVC2_FILE` are the most useful guest log captures
+- if `6530` is already in use, pick another free host port and use the same
+  value consistently in the `adb` commands below
 
-The guest-side software-rendered launch selection used by this validated run
-was:
+## Step 3: Wait For ADB And Boot Completion
 
-- `QEMU_BOOT_HARDWARE_EGL=angle`
-- `QEMU_BOOT_HARDWARE_GRALLOC=minigbm`
-- `QEMU_BOOT_HARDWARE_HWCOMPOSER=ranchu`
-- `QEMU_BOOT_HARDWARE_VULKAN=pastel`
-
-Those values are already the current launcher defaults, so the command above
-did not need to override them explicitly.
-
-## Step 3: Wait For Boot Completion
-
-On the host:
+Use the AOSP-built `adb` binary:
 
 ```bash
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb connect 127.0.0.1:6522
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 wait-for-device
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop sys.boot_completed
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb connect 127.0.0.1:6530
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb devices -l
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 wait-for-device
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 get-state
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop sys.boot_completed
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.build.fingerprint
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell ls -l /dev/block/by-name/frp
 ```
 
-Expected final value:
+Expected successful end state:
 
 ```text
-1
-```
-
-Typical progression seen on this machine:
-
-- guest `adbd` starts first
-- host ADB may briefly show `offline`
-- after framework boot finishes, the host transport becomes `device`
-
-## Step 4: Confirm ADB Works
-
-Useful validation commands:
-
-```bash
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 get-state
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop ro.build.fingerprint
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop ro.hardware.egl
-/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell ls -l /dev/block/by-name/frp
-```
-
-Validated outputs from this run:
-
-```text
-get-state -> device
-ro.hardware.egl -> angle
+adb state -> device
 sys.boot_completed -> 1
 /dev/block/by-name/frp -> /dev/block/vda2
 ```
 
-## Running On Another Machine With Virgl Or Gfxstream
+Typical progression on this image:
 
-The same built image is intentionally launch-selectable. Do not rebuild just
-to switch the host graphics backend.
+- guest `adbd` starts before the framework is fully settled
+- host `adb devices` can briefly show `offline`
+- `adb connect` can already return `connected` while the transport is still
+  transient
+- first boot spends time in APEX decompression and `cppreopts`
+- the final target state should become `device`
 
-For a virgl-capable host, the usual direction is:
+## Step 4: Useful Post-Boot Checks
+
+Once `adb` is online, these checks are useful:
 
 ```bash
-export QEMU_DISPLAY=egl-headless
-export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
-export QEMU_BOOT_HARDWARE_EGL=mesa
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.egl
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.gralloc
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell getprop ro.hardware.hwcomposer
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell ls -l /dev/dri
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6530 shell readlink -f /sys/class/drm/card0/device/driver
 ```
 
-If the target host prefers a windowed backend:
+On the validated run, the graphics properties were:
+
+```text
+ro.hardware.egl=angle
+ro.hardware.gralloc=minigbm
+ro.hardware.hwcomposer=ranchu
+```
+
+## Known Blockers Already Fixed
+
+### 1. Missing `frp` GPT partition
+
+The earlier raw-disk bundle was missing an `frp` partition even though the
+product exposes:
+
+```text
+ro.frp.pst=/dev/block/by-name/frp
+```
+
+Without that partition, `PersistentDataBlockService` timed out during boot and
+`system_server` died. The fix lives in `scripts/prepare_plain_qemu.sh`, which
+now creates and assembles:
+
+- `misc.img`
+- `frp.img`
+- `metadata.img`
+
+### 2. Stale experimental QEMU audio-policy leftovers
+
+Earlier experimental work added QEMU-specific audio-policy files, but those are
+not part of the current validated tree.
+
+Current status:
+
+- the stale QEMU audio-policy leftovers were removed
+- the current validated build does not rely on a custom QEMU audio-policy
+  module
+- the validated image boots and reaches `adb device` without those leftovers
+
+## Known Non-Blocking Runtime Issues
+
+The current validated boot still shows a few guest-side runtime problems that
+do not block `adb` or `sys.boot_completed=1`.
+
+Observed on `2026-03-19`:
+
+- `com.android.nfc` aborts and restarts after NFC HAL command timeouts
+  - `libnfc_nci_jni.so`
+  - `nfc_ncif_cmd_timeout`
+  - `NFA_DM_NFCC_TIMEOUT_EVT`
+- `com.android.bluetooth` also aborts and restarts later in boot
+  - native crash in `bt_stack_manager_thread`
+- `audioserver` repeatedly tries to start lazy `aidl/activity`
+
+These issues are visible in `/tmp/qemu-session-hvc2.log`, but they did not
+prevent:
+
+- `adb device`
+- `sys.boot_completed=1`
+- interactive shell access through ADB
+
+## If Boot Stalls, Inspect The Right Logs
+
+Primary guest logs:
+
+- `/tmp/qemu-session-hvc0.log`
+- `/tmp/qemu-session-hvc2.log`
+
+Useful host-side grep examples:
+
+```bash
+grep -nE 'PersistentDataBlockService|audio_policy_configuration|IModule/default|eglInitialize|FATAL' /tmp/qemu-session-hvc2.log
+grep -nE 'virtio_gpu|drm|SurfaceFlinger|audioserver|adbd|com.android.nfc|droid.bluetooth' /tmp/qemu-session-hvc0.log /tmp/qemu-session-hvc2.log
+```
+
+High-signal failure patterns:
+
+- `PersistentDataBlockService` errors mentioning `frp`
+  - usually means the staged disk was not rebuilt with the current prep script
+- repeated `SurfaceFlinger` aborts around `eglInitialize()`
+  - graphics bring-up is failing
+- `adb` remains `offline` for a long time during first boot
+  - wait for APEX decompression and `cppreopts` to finish before deciding it is
+    stuck
+- repeated `com.android.nfc` or `com.android.bluetooth` crashes
+  - currently non-blocking, but still worth tracking
+
+## Running The Same Bundle On Another Machine With Virgl Or Gfxstream
+
+Do not rebuild just to switch host graphics backend. The bundle under
+`plain-qemu/` is meant to stay the same.
+
+For a virgl-capable host, the minimal change is usually:
 
 ```bash
 export QEMU_DISPLAY=gtk
 export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
 export QEMU_BOOT_HARDWARE_EGL=mesa
+./scripts/run_plain_qemu.sh
 ```
 
-For gfxstream-capable host builds of QEMU, keep the same staged image and swap
-only the launch-time GPU device / display selection to the gfxstream device
-that the target host QEMU actually exposes.
+If the host prefers a headless EGL display backend, swap only the display mode:
 
-Check that host first:
+```bash
+export QEMU_DISPLAY=egl-headless
+export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
+export QEMU_BOOT_HARDWARE_EGL=mesa
+./scripts/run_plain_qemu.sh
+```
+
+For gfxstream-capable QEMU builds, keep the same staged image and change only:
+
+- `QEMU_DISPLAY`
+- `QEMU_GPU_DEVICE`
+- any required `QEMU_BOOT_HARDWARE_*` overrides for that host
+
+Check the target host first:
 
 ```bash
 qemu-system-aarch64 -device help | grep -E 'virtio-gpu|gfxstream'
 qemu-system-aarch64 -display help
 ```
-
-The key policy is:
-
-- same image
-- same `kernel`, `initrd.img`, and `os-disk.raw`
-- different host QEMU GPU device and `androidboot.hardware.*` selection at
-  launch time
-
-## Current Caveats
-
-- the source still attempts to set some vendor properties such as
-  `persist.adb.tcp.port=5555` from `vendor/build.prop`
-- this produces SELinux property-context denials in the guest log
-- those denials did not block the validated boot on this artifact
-
-- the current source pruning is focused on bootability without the cuttlefish
-  harness
-- it already disables the light HAL and Thread network for this QEMU product
-- it also stops `socket_vsock_proxy`, `setup_wifi`, and `init_wifi_sh`
-- it does not try to remove every inherited cuttlefish package from the image
 
 ## Files Involved
 

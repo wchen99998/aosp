@@ -1,0 +1,69 @@
+diff --git a/target/product/handheld_system.mk b/target/product/handheld_system.mk
+index 2b055c7..63d9c84 100644
+--- a/target/product/handheld_system.mk
++++ b/target/product/handheld_system.mk
+@@ -56,7 +56,6 @@ PRODUCT_PACKAGES += \
+     KeyChain \
+     librs_jni \
+     ManagedProvisioning \
+-    MmsService \
+     MtpService \
+     MusicFX \
+     PacProcessor \
+@@ -67,19 +66,29 @@ PRODUCT_PACKAGES += \
+     screenrecord \
+     SecureElement \
+     SharedStorageBackup \
+-    SimAppDialog \
+     Telecom \
+-    TeleService \
+     Traceur \
+     UserDictionaryProvider \
+     VpnDialogs \
+     vr \
+ 
+-# Choose the correct products based on HSUM status
+-ifeq ($(PRODUCT_USE_HSUM),true)
+-  PRODUCT_PACKAGES += TelephonyProviderHsum
+-else
+-  PRODUCT_PACKAGES += TelephonyProvider
++ifneq ($(BOARD_HAVE_BLUETOOTH),false)
++PRODUCT_PACKAGES += \
++    BluetoothMidiService
++endif
++
++ifneq ($(TARGET_NO_TELEPHONY),true)
++PRODUCT_PACKAGES += \
++    MmsService \
++    SimAppDialog \
++    TeleService
++
++  # Choose the correct products based on HSUM status
++  ifeq ($(PRODUCT_USE_HSUM),true)
++    PRODUCT_PACKAGES += TelephonyProviderHsum
++  else
++    PRODUCT_PACKAGES += TelephonyProvider
++  endif
+ endif
+ 
+ PRODUCT_PACKAGES += $(RELEASE_PACKAGE_VIRTUAL_CAMERA)
+diff --git a/target/product/telephony_system_ext.mk b/target/product/telephony_system_ext.mk
+index f821381..756f7cd 100644
+--- a/target/product/telephony_system_ext.mk
++++ b/target/product/telephony_system_ext.mk
+@@ -17,11 +17,13 @@
+ # This is the list of modules that are specific to products that have telephony
+ # hardware, and install to the system_ext partition.
+ 
++ifneq ($(TARGET_NO_TELEPHONY),true)
+ # /system_ext packages
+ PRODUCT_PACKAGES += \
+     CarrierConfig \
+-    EmergencyInfo \
++    EmergencyInfo
+ 
+ PRODUCT_PACKAGES_SHIPPING_API_LEVEL_34 += \
+     hwservicemanager \
+-    android.hidl.allocator@1.0-service \
++    android.hidl.allocator@1.0-service
++endif
