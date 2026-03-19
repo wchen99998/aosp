@@ -34,7 +34,9 @@ Notes:
 
 - `rsync` was required by the AOSP build and its absence caused an earlier
   build failure
-- `mke2fs` and `sgdisk` are used by `scripts/prepare_plain_qemu.sh`
+- `scripts/prepare_plain_qemu.sh` vendors its own boot-image unpacker at
+  `scripts/unpack_bootimg.py`
+- external staging tools are `simg2img`, `mke2fs`, and `sgdisk`
 - `qemu-system-aarch64` is provided by the Ubuntu `qemu-system-arm` package
 - `adb` is taken from the AOSP host tools under
   `/home/azureuser/aosp/src/out/host/linux-x86/bin/adb`
@@ -145,6 +147,10 @@ After a successful build:
 cd /home/azureuser/aosp
 ./scripts/prepare_plain_qemu.sh
 ```
+
+`scripts/prepare_plain_qemu.sh` prefers the vendored
+`scripts/unpack_bootimg.py`, so you do not need the AOSP-host
+`unpack_bootimg` binary to stage the bundle.
 
 The prep script consumes these compiled outputs from the product directory:
 

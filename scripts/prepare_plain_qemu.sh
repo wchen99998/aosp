@@ -5,7 +5,8 @@ ROOT=/home/azureuser/aosp
 OUT=${OUT:-$ROOT/src/out/target/product/vsoc_arm64_only}
 HOSTBIN=${HOSTBIN:-$ROOT/src/out/host/linux-x86/bin}
 STAGE=${STAGE:-$ROOT/plain-qemu}
-DD_BS=${DD_BS:-4M}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_UNPACK_BOOTIMG=${LOCAL_UNPACK_BOOTIMG:-$SCRIPT_DIR/unpack_bootimg.py}
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -22,16 +23,57 @@ require_file() {
   }
 }
 
-require python3
-require /usr/sbin/mke2fs
-require /usr/sbin/sgdisk
+first_existing() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -f "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
 
-for tool in simg2img unpack_bootimg; do
-  if [[ ! -x "$HOSTBIN/$tool" ]]; then
-    echo "missing required host tool: $HOSTBIN/$tool" >&2
-    exit 1
+  return 1
+}
+
+resolve_tool() {
+  local tool=$1
+  if [[ "$tool" == "unpack_bootimg" && -x "$LOCAL_UNPACK_BOOTIMG" ]]; then
+    echo "$LOCAL_UNPACK_BOOTIMG"
+    return 0
   fi
-done
+
+  if [[ -n "${HOSTBIN:-}" && -x "$HOSTBIN/$tool" ]]; then
+    echo "$HOSTBIN/$tool"
+    return 0
+  fi
+
+  if command -v "$tool" >/dev/null 2>&1; then
+    command -v "$tool"
+    return 0
+  fi
+
+  echo "missing required tool: $tool" >&2
+  exit 1
+}
+
+file_size_bytes() {
+  local path=$1
+  if stat -f%z "$path" >/dev/null 2>&1; then
+    stat -f%z "$path"
+    return 0
+  fi
+
+  stat -c%s "$path"
+}
+
+require python3
+require mke2fs
+require sgdisk
+
+SIMG2IMG=$(resolve_tool simg2img)
+UNPACK_BOOTIMG=$(resolve_tool unpack_bootimg)
+MKE2FS=$(command -v mke2fs)
+SGDISK=$(command -v sgdisk)
 
 for file in \
   "$OUT/boot.img" \
@@ -48,11 +90,16 @@ done
 
 mkdir -p "$STAGE"/unpack/boot "$STAGE"/unpack/vendor_boot
 
-"$HOSTBIN/unpack_bootimg" --boot_img "$OUT/boot.img" --out "$STAGE/unpack/boot"
-"$HOSTBIN/unpack_bootimg" --boot_img "$OUT/vendor_boot.img" --out "$STAGE/unpack/vendor_boot"
+"$UNPACK_BOOTIMG" --boot_img "$OUT/boot.img" --out "$STAGE/unpack/boot"
+"$UNPACK_BOOTIMG" --boot_img "$OUT/vendor_boot.img" --out "$STAGE/unpack/vendor_boot"
+
+vendor_ramdisk_path=$(first_existing \
+  "$STAGE/unpack/vendor_boot/vendor_ramdisk00" \
+  "$STAGE/unpack/vendor_boot/vendor_ramdisk")
+require_file "$vendor_ramdisk_path"
 
 cp "$STAGE/unpack/boot/kernel" "$STAGE/kernel"
-cp "$STAGE/unpack/vendor_boot/vendor_ramdisk00" "$STAGE/vendor_ramdisk.lz4"
+cp "$vendor_ramdisk_path" "$STAGE/vendor_ramdisk.lz4"
 cp "$STAGE/unpack/vendor_boot/bootconfig" "$STAGE/vendor_bootconfig.txt"
 cp "$STAGE/unpack/vendor_boot/dtb" "$STAGE/dtb.img"
 
@@ -64,13 +111,13 @@ for file in \
   require_file "$file"
 done
 
-"$HOSTBIN/simg2img" "$OUT/super.img" "$STAGE/super.raw"
-"$HOSTBIN/simg2img" "$OUT/userdata.img" "$STAGE/userdata.raw"
+"$SIMG2IMG" "$OUT/super.img" "$STAGE/super.raw"
+"$SIMG2IMG" "$OUT/userdata.img" "$STAGE/userdata.raw"
 
 truncate -s 1M "$STAGE/misc.img"
 truncate -s 1M "$STAGE/frp.img"
 truncate -s 64M "$STAGE/metadata.img"
-/usr/sbin/mke2fs -q -t ext4 -F "$STAGE/metadata.img"
+"$MKE2FS" -q -t ext4 -F "$STAGE/metadata.img"
 
 cat >"$STAGE/bootconfig.extra.txt" <<'EOF'
 androidboot.slot_suffix=_a
@@ -152,7 +199,7 @@ declare -a PART_FILES=(
 start=2048
 total_end=2048
 for file in "${PART_FILES[@]}"; do
-  size=$(stat -c%s "$file")
+  size=$(file_size_bytes "$file")
   sectors=$(( (size + 511) / 512 ))
   start=$(align_sectors "$start")
   end=$(( start + sectors - 1 ))
@@ -162,19 +209,18 @@ done
 
 disk_sectors=$(align_sectors $(( total_end + 4096 )))
 truncate -s $(( disk_sectors * 512 )) "$STAGE/os-disk.raw"
-/usr/sbin/sgdisk --zap-all "$STAGE/os-disk.raw" >/dev/null
+"$SGDISK" --zap-all "$STAGE/os-disk.raw" >/dev/null
 
 start=2048
 for i in "${!PART_NAMES[@]}"; do
   file=${PART_FILES[$i]}
-  size=$(stat -c%s "$file")
+  size=$(file_size_bytes "$file")
   sectors=$(( (size + 511) / 512 ))
   start=$(align_sectors "$start")
   end=$(( start + sectors - 1 ))
   idx=$(( i + 1 ))
-  offset_bytes=$(( start * 512 ))
-  /usr/sbin/sgdisk -n "${idx}:${start}:${end}" -c "${idx}:${PART_NAMES[$i]}" "$STAGE/os-disk.raw" >/dev/null
-  dd if="$file" of="$STAGE/os-disk.raw" bs="$DD_BS" seek="$offset_bytes" oflag=seek_bytes conv=notrunc status=none
+  "$SGDISK" -n "${idx}:${start}:${end}" -c "${idx}:${PART_NAMES[$i]}" "$STAGE/os-disk.raw" >/dev/null
+  dd if="$file" of="$STAGE/os-disk.raw" bs=512 seek="$start" conv=notrunc status=none
   start=$(( end + 1 ))
 done
 

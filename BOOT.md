@@ -72,6 +72,10 @@ rm -rf plain-qemu
 ./scripts/prepare_plain_qemu.sh
 ```
 
+The prep script now carries its own boot-image unpacker at
+`scripts/unpack_bootimg.py`, so staging does not depend on the AOSP-host
+`unpack_bootimg` binary being present on the machine that prepares the bundle.
+
 The prep script consumes these compiled build outputs:
 
 - `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/boot.img`

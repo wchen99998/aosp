@@ -2,3 +2,4 @@ src/
 plain-qemu/
 qemu-ready/
 tmp/
+__pycache__/
