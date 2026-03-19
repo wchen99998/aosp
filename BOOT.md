@@ -14,6 +14,14 @@ Naming:
 
 `plain-qemu` is the no-harness runtime flow, not a separate build flavor.
 
+Important path detail:
+
+- the scripts currently read compiled images from
+  `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
+- that directory name is board/output-layout based; it is still the correct
+  output directory for the `aosp_cf_arm64_only_phone_qemu` build in this
+  workspace
+
 ## Current Validated Result
 
 Validated on this no-GPU server on 2026-03-19:
@@ -77,6 +85,18 @@ This stages:
 - `/home/azureuser/aosp/plain-qemu/super.raw`
 - `/home/azureuser/aosp/plain-qemu/userdata.raw`
 
+The prep script consumes these compiled build outputs:
+
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/boot.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/init_boot.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/vendor_boot.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/super.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/userdata.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/vbmeta.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/vbmeta_system.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/vbmeta_vendor_dlkm.img`
+- `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only/vbmeta_system_dlkm.img`
+
 The prep script does all of the following:
 
 - unpacks `boot.img` and `vendor_boot.img`
@@ -86,6 +106,15 @@ The prep script does all of the following:
 - creates `metadata.img`
 - appends bootconfig onto the vendor ramdisk to build `initrd.img`
 - assembles a single GPT disk `os-disk.raw`
+
+The actual bootable QEMU artifact is this bundle:
+
+- `plain-qemu/kernel`
+- `plain-qemu/initrd.img`
+- `plain-qemu/os-disk.raw`
+
+`super.raw` and `userdata.raw` are staged intermediate/supporting artifacts,
+not the files that QEMU boots directly.
 
 Current GPT partitions in `os-disk.raw`:
 
@@ -101,6 +130,14 @@ Current GPT partitions in `os-disk.raw`:
 - `super`
 - `userdata`
 - `metadata`
+
+If the compiled output directory is somewhere else, the prep script can be
+pointed at it explicitly:
+
+```bash
+cd /home/azureuser/aosp
+OUT=/path/to/out/target/product/vsoc_arm64_only ./scripts/prepare_plain_qemu.sh
+```
 
 ## Step 2: Boot On This No-GPU Server
 

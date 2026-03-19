@@ -14,6 +14,14 @@ require() {
   }
 }
 
+require_file() {
+  local path=$1
+  [[ -f "$path" ]] || {
+    echo "missing required input file: $path" >&2
+    exit 1
+  }
+}
+
 require python3
 require /usr/sbin/mke2fs
 require /usr/sbin/sgdisk
@@ -25,6 +33,19 @@ for tool in simg2img unpack_bootimg; do
   fi
 done
 
+for file in \
+  "$OUT/boot.img" \
+  "$OUT/init_boot.img" \
+  "$OUT/vendor_boot.img" \
+  "$OUT/super.img" \
+  "$OUT/userdata.img" \
+  "$OUT/vbmeta.img" \
+  "$OUT/vbmeta_system.img" \
+  "$OUT/vbmeta_vendor_dlkm.img" \
+  "$OUT/vbmeta_system_dlkm.img"; do
+  require_file "$file"
+done
+
 mkdir -p "$STAGE"/unpack/boot "$STAGE"/unpack/vendor_boot
 
 "$HOSTBIN/unpack_bootimg" --boot_img "$OUT/boot.img" --out "$STAGE/unpack/boot"
@@ -34,6 +55,14 @@ cp "$STAGE/unpack/boot/kernel" "$STAGE/kernel"
 cp "$STAGE/unpack/vendor_boot/vendor_ramdisk00" "$STAGE/vendor_ramdisk.lz4"
 cp "$STAGE/unpack/vendor_boot/bootconfig" "$STAGE/vendor_bootconfig.txt"
 cp "$STAGE/unpack/vendor_boot/dtb" "$STAGE/dtb.img"
+
+for file in \
+  "$STAGE/kernel" \
+  "$STAGE/vendor_ramdisk.lz4" \
+  "$STAGE/vendor_bootconfig.txt" \
+  "$STAGE/dtb.img"; do
+  require_file "$file"
+done
 
 "$HOSTBIN/simg2img" "$OUT/super.img" "$STAGE/super.raw"
 "$HOSTBIN/simg2img" "$OUT/userdata.img" "$STAGE/userdata.raw"
@@ -157,11 +186,32 @@ cat >"$STAGE/README.txt" <<EOF
 Prepared plain-QEMU bundle at:
   $STAGE
 
+Compiled build output consumed from:
+  $OUT
+
+Required compiled inputs:
+  $OUT/boot.img
+  $OUT/init_boot.img
+  $OUT/vendor_boot.img
+  $OUT/super.img
+  $OUT/userdata.img
+  $OUT/vbmeta.img
+  $OUT/vbmeta_system.img
+  $OUT/vbmeta_vendor_dlkm.img
+  $OUT/vbmeta_system_dlkm.img
+
 Main outputs:
   $STAGE/kernel
   $STAGE/initrd.img
   $STAGE/os-disk.raw
   $STAGE/kernel.cmdline
+
+Bootable QEMU artifact:
+  kernel + initrd.img + os-disk.raw
+
+Supporting staged artifacts:
+  $STAGE/super.raw
+  $STAGE/userdata.raw
 EOF
 
 echo "prepared plain-QEMU bundle in $STAGE"

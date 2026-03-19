@@ -30,10 +30,26 @@ QEMU_BOOT_LCD_DENSITY=${QEMU_BOOT_LCD_DENSITY:-320}
 QEMU_BOOT_OPENGLES_VERSION=${QEMU_BOOT_OPENGLES_VERSION:-196609}
 QEMU_BOOT_HARDWARE_GLTRANSPORT=${QEMU_BOOT_HARDWARE_GLTRANSPORT:-}
 
-if [[ ! -f "$STAGE/kernel" || ! -f "$STAGE/os-disk.raw" ]]; then
-  echo "missing staged bundle under $STAGE; run scripts/prepare_plain_qemu.sh first" >&2
+require_file() {
+  local path=$1
+  [[ -f "$path" ]] || {
+    echo "missing required staged file: $path" >&2
+    exit 1
+  }
+}
+
+if [[ ! -x "$QEMU" ]]; then
+  echo "missing QEMU binary: $QEMU" >&2
   exit 1
 fi
+
+for file in \
+  "$STAGE/kernel" \
+  "$STAGE/initrd.img" \
+  "$STAGE/os-disk.raw" \
+  "$STAGE/kernel.cmdline"; do
+  require_file "$file"
+done
 
 CMDLINE=$(tr '\n' ' ' <"$STAGE/kernel.cmdline" | sed 's/[[:space:]]\+/ /g')
 CMDLINE+=" androidboot.cpuvulkan.version=${QEMU_BOOT_CPUVULKAN_VERSION}"

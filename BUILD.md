@@ -6,6 +6,12 @@
 - Source tree: `/home/azureuser/aosp/src`
 - Product output: `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
 
+Important path detail:
+
+- even though the lunch target is `aosp_cf_arm64_only_phone_qemu`, the built
+  artifact directory used by the workspace scripts is still
+  `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
+
 ## Product
 
 The build target is:
@@ -119,6 +125,33 @@ cd /home/azureuser/aosp
 ```
 
 Then follow `/home/azureuser/aosp/BOOT.md`.
+
+The prep script consumes these compiled outputs from the product directory:
+
+- `boot.img`
+- `init_boot.img`
+- `vendor_boot.img`
+- `super.img`
+- `userdata.img`
+- `vbmeta.img`
+- `vbmeta_system.img`
+- `vbmeta_vendor_dlkm.img`
+- `vbmeta_system_dlkm.img`
+
+The resulting bootable QEMU artifact is not a single file. It is the bundle:
+
+- `plain-qemu/kernel`
+- `plain-qemu/initrd.img`
+- `plain-qemu/os-disk.raw`
+
+with `plain-qemu/kernel.cmdline` providing the default kernel command line.
+
+If needed, the scripts can target another compiled output directory:
+
+```bash
+cd /home/azureuser/aosp
+OUT=/path/to/out/target/product/vsoc_arm64_only ./scripts/prepare_plain_qemu.sh
+```
 
 Consistency rule:
 
