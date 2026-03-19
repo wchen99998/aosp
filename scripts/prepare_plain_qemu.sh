@@ -5,6 +5,7 @@ ROOT=/home/azureuser/aosp
 OUT=${OUT:-$ROOT/src/out/target/product/vsoc_arm64_only}
 HOSTBIN=${HOSTBIN:-$ROOT/src/out/host/linux-x86/bin}
 STAGE=${STAGE:-$ROOT/plain-qemu}
+DD_BS=${DD_BS:-4M}
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -38,6 +39,7 @@ cp "$STAGE/unpack/vendor_boot/dtb" "$STAGE/dtb.img"
 "$HOSTBIN/simg2img" "$OUT/userdata.img" "$STAGE/userdata.raw"
 
 truncate -s 1M "$STAGE/misc.img"
+truncate -s 1M "$STAGE/frp.img"
 truncate -s 64M "$STAGE/metadata.img"
 /usr/sbin/mke2fs -q -t ext4 -F "$STAGE/metadata.img"
 
@@ -48,14 +50,6 @@ androidboot.verifiedbootstate=orange
 androidboot.fstab_suffix=cf.f2fs.hctr2
 androidboot.boot_devices=4010000000.pcie
 androidboot.serialconsole=0
-androidboot.cpuvulkan.version=0
-androidboot.hardware.gralloc=minigbm
-androidboot.hardware.hwcomposer=ranchu
-androidboot.hardware.hwcomposer.mode=client
-androidboot.hardware.hwcomposer.display_finder_mode=drm
-androidboot.hardware.hwcomposer.display_framebuffer_format=rgba
-androidboot.hardware.egl=mesa
-androidboot.opengles.version=196608
 EOF
 
 cat "$STAGE/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$STAGE/bootconfig.combined.txt"
@@ -84,6 +78,7 @@ align_sectors() {
 
 declare -a PART_NAMES=(
   misc
+  frp
   boot_a
   boot_b
   init_boot_a
@@ -105,6 +100,7 @@ declare -a PART_NAMES=(
 
 declare -a PART_FILES=(
   "$STAGE/misc.img"
+  "$STAGE/frp.img"
   "$OUT/boot.img"
   "$OUT/boot.img"
   "$OUT/init_boot.img"
@@ -147,8 +143,9 @@ for i in "${!PART_NAMES[@]}"; do
   start=$(align_sectors "$start")
   end=$(( start + sectors - 1 ))
   idx=$(( i + 1 ))
+  offset_bytes=$(( start * 512 ))
   /usr/sbin/sgdisk -n "${idx}:${start}:${end}" -c "${idx}:${PART_NAMES[$i]}" "$STAGE/os-disk.raw" >/dev/null
-  dd if="$file" of="$STAGE/os-disk.raw" bs=512 seek="$start" conv=notrunc >/dev/null 2>&1
+  dd if="$file" of="$STAGE/os-disk.raw" bs="$DD_BS" seek="$offset_bytes" oflag=seek_bytes conv=notrunc status=none
   start=$(( end + 1 ))
 done
 

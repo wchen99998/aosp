@@ -2,38 +2,55 @@
 
 ## Workspace
 
-- Root: `/home/azureuser/aosp`
+- Root workspace: `/home/azureuser/aosp`
 - Source tree: `/home/azureuser/aosp/src`
+- Product output: `/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only`
 
-## Sync Status
+## Product
 
-The repo sync completed successfully. The source checkout is present under `src/`.
+The build target is:
 
-## Host Prerequisite
+```bash
+cd /home/azureuser/aosp/src
+source build/envsetup.sh
+lunch aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
+```
 
-This tree requires `rsync` during the build. On this machine it was missing and caused the build to fail during AIDL code generation with `/bin/sh: 1: rsync: not found`.
+That lunch target resolves to:
 
-Install it with:
+- `TARGET_PRODUCT=aosp_cf_arm64_only_phone_qemu`
+- `TARGET_ARCH=arm64`
+
+Important naming detail:
+
+- `aosp_cf_arm64_only_phone_qemu` is the built product in `src/`
+- `plain-qemu/` is only the staged no-harness runtime bundle created later by
+  the workspace scripts
+- `plain-qemu` is not a second lunch flavor
+
+## Host Prerequisites
+
+Required to build:
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y rsync
 ```
 
-## QEMU Product
-
-The custom lunch target is:
+Required to stage and validate the built image in this workspace:
 
 ```bash
-aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
+sudo apt-get install -y e2fsprogs gdisk f2fs-tools xvfb
 ```
 
-It resolves to:
+Notes:
 
-- `TARGET_PRODUCT=aosp_cf_arm64_only_phone_qemu`
-- `TARGET_ARCH=arm64`
+- `rsync` was required by the AOSP build and its absence caused an earlier
+  failure
+- `mke2fs` and `sgdisk` are used by `scripts/prepare_plain_qemu.sh`
+- `xvfb` is used only for the no-GPU software-rendered runtime validation
 
-## Build Commands
+## Build Command
 
 Run from `/home/azureuser/aosp/src`:
 
@@ -43,52 +60,69 @@ lunch aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
 m -j$(nproc)
 ```
 
-## Current QEMU-Specific Changes
+The current image build completed successfully.
 
-The build currently uses the stock cuttlefish vendor init file plus an additional QEMU-specific init fragment, instead of replacing `init.cutf_cvm.rc`.
+## Source Changes In `src/`
 
-Why:
+The tracked source changes live under `src/device/google/cuttlefish` and are
+exported in `/home/azureuser/aosp/patches/0001-cuttlefish-qemu.patch`.
 
-- Replacing the stock init module caused an install-path conflict because both prebuilts tried to install `vendor/etc/init/init.cutf_cvm.rc`.
-- The current graph-valid approach is to keep the stock module and install a separate QEMU fragment as `vendor/etc/init/init.qemu.rc`.
+High-level changes:
 
-The QEMU product currently adds:
+- `AndroidProducts.mk`
+  - adds the `aosp_cf_arm64_only_phone_qemu` lunch product
+- `vsoc_arm64_only/phone/aosp_cf_qemu.mk`
+  - inherits the stock arm64-only phone product
+  - keeps Gatekeeper and KeyMint on nonsecure in-guest implementations
+  - keeps the ranchu graphics composer
+  - disables the light HAL and Thread network pieces for this QEMU product
+  - adds QEMU-specific metadata
+  - does not bake a fixed graphics backend into read-only properties
+- `shared/device.mk`
+  - gates light and Thread network package inclusion so the QEMU child product
+    can disable them cleanly
+- `shared/phone/device_vendor.mk`
+  - keeps virgl packaging available by default so the same built image can be
+    used on other machines with virgl-capable hosts
+- `shared/config/qemu/init.vendor.qemu.rc`
+  - layers a small QEMU-specific init fragment on top of stock cuttlefish init
+  - stops `socket_vsock_proxy`
+  - stops `setup_wifi` and `init_wifi_sh`
+  - brings `eth0` up directly
 
-- `persist.adb.tcp.port=5555`
-- `ro.vendor.disable_rename_eth0=1`
-- `ro.cuttlefish.guest_profile=cuttlefish-qemu`
-- `ro.cuttlefish.adb_transport=rawTcp`
-- `ro.cuttlefish.guest_adb_port=5555`
-- `ro.hardware.egl=mesa`
-- `device_google_cuttlefish_qemu_config_init_vendor_rc`
+Important build-graph detail:
 
-The QEMU init fragment currently:
+- the stock `init.cutf_cvm.rc` is not replaced
+- a separate QEMU init fragment is installed instead
+- replacing the stock prebuilt caused an install-path conflict during the build
 
-- stops `setup_wifi`
-- stops `init_wifi_sh`
-- brings up `eth0`
-- stops `socket_vsock_proxy`
+## Graphics Backend Policy
 
-## Important Caveat
+The built image is intentionally launch-selectable:
 
-The original attempt to strip inherited `PRODUCT_PACKAGES`, `PRODUCT_HOST_PACKAGES`, and `PRODUCT_VENDOR_PROPERTIES` from the child product makefile using `$(filter-out ...)` does not reliably subtract inherited values in this AOSP product inheritance model.
+- software-rendered validation on this no-GPU server uses
+  `androidboot.hardware.egl=angle` and `androidboot.hardware.vulkan=pastel`
+- virgl-capable runtime hosts can launch the same image with a different QEMU
+  GPU device and different `androidboot.hardware.*` values
+- the source tree does not hardcode `ro.hardware.egl=mesa` anymore
 
-That means:
+That is why the build product is still `aosp_cf_arm64_only_phone_qemu`, while
+the runtime choice is made later by `scripts/run_plain_qemu.sh`.
 
-- the current target is buildable again
-- the current target is not yet a fully stripped runtime-only QEMU flavor
+## After Build
 
-If deeper runtime pruning is needed later, it should be done through supported upstream/product composition changes rather than child-level `filter-out` on inherited product lists.
-
-## Current Build Status
-
-After fixing the init-module conflict and installing `rsync`, the build restarted successfully and progressed past the previous failures.
-
-To continue the incremental build:
+After a successful build:
 
 ```bash
-cd /home/azureuser/aosp/src
-source build/envsetup.sh
-lunch aosp_cf_arm64_only_phone_qemu-trunk_staging-userdebug
-m -j$(nproc)
+cd /home/azureuser/aosp
+./scripts/prepare_plain_qemu.sh
 ```
+
+Then follow `/home/azureuser/aosp/BOOT.md`.
+
+Consistency rule:
+
+- restage only from a consistent image set
+- if `super.img` changes, keep the matching `vbmeta*` images from the same
+  build
+- then rerun `./scripts/prepare_plain_qemu.sh`

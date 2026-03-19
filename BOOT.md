@@ -2,64 +2,64 @@
 
 ## Scope
 
-This file documents the exact split between:
+This file documents the exact process for taking the already-built
+`aosp_cf_arm64_only_phone_qemu` output and turning it into a bootable
+plain-QEMU bundle that does not require the cuttlefish harness.
 
-- preparing the built artifacts on the build machine
-- launching the prepared artifacts on a separate GPU-capable runtime host
-- what can still be validated on a no-GPU build machine
+Naming:
 
-The custom product is built under:
+- built product: `aosp_cf_arm64_only_phone_qemu`
+- staged runtime bundle: `/home/azureuser/aosp/plain-qemu`
+- launcher path: `scripts/run_plain_qemu.sh`
+
+`plain-qemu` is the no-harness runtime flow, not a separate build flavor.
+
+## Current Validated Result
+
+Validated on this no-GPU server on 2026-03-19:
+
+- booted in plain QEMU without `launch_cvd` or `run_cvd`
+- `sys.boot_completed=1`
+- ADB transport reached `device`
+- ADB shell worked
+- `/dev/block/by-name/frp` existed and resolved to `/dev/block/vda2`
+
+Validated host-side command results:
 
 ```bash
-/home/azureuser/aosp/src/out/target/product/vsoc_arm64_only
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 get-state
+# device
+
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop sys.boot_completed
+# 1
+
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell ls -l /dev/block/by-name/frp
+# /dev/block/by-name/frp -> /dev/block/vda2
 ```
 
-The prepared plain-QEMU bundle is staged under:
+## Why The Earlier Boot Failed
 
-```bash
-/home/azureuser/aosp/plain-qemu
+The earlier raw-disk bundle was missing an `frp` GPT partition.
+
+That mattered because the product still exposes:
+
+```text
+ro.frp.pst=/dev/block/by-name/frp
 ```
 
-## Current Status
+Without that partition, `PersistentDataBlockService` timed out during boot
+phase 500 and killed `system_server`.
 
-The image no longer depends on the cuttlefish harness to get through the real
-boot-chain problems that were present earlier:
+The fix was not another image rebuild. The fix was to make
+`scripts/prepare_plain_qemu.sh` create and include:
 
-- duplicate Gatekeeper APEX fixed
-- duplicate KeyMint APEX fixed
-- duplicate graphics composer APEX fixed
-- direct plain-QEMU boot reaches Android userspace without `run_cvd`
+- `misc.img`
+- `frp.img`
+- `metadata.img`
 
-The remaining display-stack failures seen on this build machine are not strong
-evidence of a bad image, because this machine does not provide a usable GPU
-backend for the guest runtime that this product expects.
+and assemble `frp` into `os-disk.raw`.
 
-## Build Machine Limit
-
-This machine is good for:
-
-- compiling the image
-- unpacking and staging the raw artifacts
-- limited headless validation of kernel, init, dynamic partitions, apexd,
-  zygote, and `adbd`
-
-This machine is not good for:
-
-- final validation of the graphics stack
-- final validation of SurfaceFlinger
-- final validation of the cuttlefish display/light path
-
-In practice, the no-GPU build machine can still validate that:
-
-- the image boots without cuttlefish orchestration
-- the GPT disk layout is correct
-- first-stage init mounts the dynamic partitions correctly
-- vendor APEX activation succeeds
-- `adbd` starts
-
-It cannot fully validate a graphics-dependent Android boot for this product.
-
-## Step 1: Prepare The Bundle On The Build Machine
+## Step 1: Prepare The Plain-QEMU Bundle
 
 Run:
 
@@ -68,7 +68,7 @@ cd /home/azureuser/aosp
 ./scripts/prepare_plain_qemu.sh
 ```
 
-This produces:
+This stages:
 
 - `/home/azureuser/aosp/plain-qemu/kernel`
 - `/home/azureuser/aosp/plain-qemu/initrd.img`
@@ -77,192 +77,173 @@ This produces:
 - `/home/azureuser/aosp/plain-qemu/super.raw`
 - `/home/azureuser/aosp/plain-qemu/userdata.raw`
 
-What the script does:
+The prep script does all of the following:
 
 - unpacks `boot.img` and `vendor_boot.img`
-- extracts the kernel, vendor ramdisk, dtb, and bootconfig
+- extracts the kernel, vendor ramdisk, DTB, and bootconfig
 - converts `super.img` and `userdata.img` from sparse to raw
-- creates `misc.img` and `metadata.img`
-- builds a single GPT disk image `os-disk.raw`
-- appends bootconfig to the vendor ramdisk to form `initrd.img`
+- creates blank `misc.img` and `frp.img`
+- creates `metadata.img`
+- appends bootconfig onto the vendor ramdisk to build `initrd.img`
+- assembles a single GPT disk `os-disk.raw`
 
-## Step 2: Copy The Prepared Bundle To The Runtime Host
+Current GPT partitions in `os-disk.raw`:
 
-Copy the whole staging directory:
+- `misc`
+- `frp`
+- `boot_a`
+- `boot_b`
+- `init_boot_a`
+- `init_boot_b`
+- `vendor_boot_a`
+- `vendor_boot_b`
+- `vbmeta*`
+- `super`
+- `userdata`
+- `metadata`
+
+## Step 2: Boot On This No-GPU Server
+
+This server does not have a physical GPU. The validated path here is:
+
+- Xvfb for a display server
+- Mesa llvmpipe on the host
+- guest software graphics selection via launch-time `androidboot.hardware.*`
+
+Start Xvfb:
 
 ```bash
-rsync -av /home/azureuser/aosp/plain-qemu/ user@runtime-host:/path/plain-qemu/
+Xvfb :101 -screen 0 1280x1024x24 >/tmp/xvfb-101.log 2>&1 &
 ```
 
-Only the prepared bundle is required on the runtime host. The full AOSP tree is
-not required there.
-
-## Step 3: Runtime Host Requirements
-
-The runtime host should have:
-
-- `qemu-system-aarch64`
-- a working OpenGL/EGL-capable GPU stack
-- QEMU support for at least:
-  - `virtio-gpu-gl-pci`
-  - `egl-headless` or `gtk`
-
-Useful checks:
+Launch QEMU:
 
 ```bash
-qemu-system-aarch64 -device help | grep virtio-gpu
+cd /home/azureuser/aosp
+DISPLAY=:101 \
+GDK_BACKEND=x11 \
+LIBGL_ALWAYS_SOFTWARE=1 \
+GALLIUM_DRIVER=llvmpipe \
+MESA_LOADER_DRIVER_OVERRIDE=llvmpipe \
+QEMU_DISPLAY=gtk \
+QEMU_STDIO_HVC=99 \
+QEMU_HOST_ADB_PORT=6522 \
+QEMU_HVC0_FILE=/tmp/qemu-swgl-hvc0.log \
+QEMU_HVC2_FILE=/tmp/qemu-swgl-hvc2.log \
+./scripts/run_plain_qemu.sh
+```
+
+Important details:
+
+- `QEMU_STDIO_HVC=99` disables stdio-backed virtconsoles, which avoids
+  background job-control stops when QEMU is daemonized or run under a terminal
+- this host's QEMU build did not support `gtk,gl=on`; plain `gtk` worked
+- `QEMU_HVC0_FILE` and `QEMU_HVC2_FILE` are the useful guest log captures
+
+The guest-side software-rendered launch selection used by this validated run
+was:
+
+- `QEMU_BOOT_HARDWARE_EGL=angle`
+- `QEMU_BOOT_HARDWARE_GRALLOC=minigbm`
+- `QEMU_BOOT_HARDWARE_HWCOMPOSER=ranchu`
+- `QEMU_BOOT_HARDWARE_VULKAN=pastel`
+
+Those values are already the current launcher defaults, so the command above
+did not need to override them explicitly.
+
+## Step 3: Wait For Boot Completion
+
+On the host:
+
+```bash
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb connect 127.0.0.1:6522
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 wait-for-device
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop sys.boot_completed
+```
+
+Expected final value:
+
+```text
+1
+```
+
+Typical progression seen on this machine:
+
+- guest `adbd` starts first
+- host ADB may briefly show `offline`
+- after framework boot finishes, the host transport becomes `device`
+
+## Step 4: Confirm ADB Works
+
+Useful validation commands:
+
+```bash
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 get-state
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop ro.build.fingerprint
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell getprop ro.hardware.egl
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6522 shell ls -l /dev/block/by-name/frp
+```
+
+Validated outputs from this run:
+
+```text
+get-state -> device
+ro.hardware.egl -> angle
+sys.boot_completed -> 1
+/dev/block/by-name/frp -> /dev/block/vda2
+```
+
+## Running On Another Machine With Virgl Or Gfxstream
+
+The same built image is intentionally launch-selectable. Do not rebuild just
+to switch the host graphics backend.
+
+For a virgl-capable host, the usual direction is:
+
+```bash
+export QEMU_DISPLAY=egl-headless
+export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
+export QEMU_BOOT_HARDWARE_EGL=mesa
+```
+
+If the target host prefers a windowed backend:
+
+```bash
+export QEMU_DISPLAY=gtk
+export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
+export QEMU_BOOT_HARDWARE_EGL=mesa
+```
+
+For gfxstream-capable host builds of QEMU, keep the same staged image and swap
+only the launch-time GPU device / display selection to the gfxstream device
+that the target host QEMU actually exposes.
+
+Check that host first:
+
+```bash
+qemu-system-aarch64 -device help | grep -E 'virtio-gpu|gfxstream'
 qemu-system-aarch64 -display help
 ```
 
-Expected useful output includes:
+The key policy is:
 
-- `virtio-gpu-gl-pci`
-- `egl-headless`
+- same image
+- same `kernel`, `initrd.img`, and `os-disk.raw`
+- different host QEMU GPU device and `androidboot.hardware.*` selection at
+  launch time
 
-## Step 4: Launch On The GPU-Capable Runtime Host
+## Current Caveats
 
-The launcher script supports both a headless builder validation mode and a
-GPU-backed runtime mode.
+- the source still attempts to set some vendor properties such as
+  `persist.adb.tcp.port=5555` from `vendor/build.prop`
+- this produces SELinux property-context denials in the guest log
+- those denials did not block the validated boot on this artifact
 
-GPU-backed runtime mode:
-
-```bash
-cd /path
-export STAGE=/path/plain-qemu
-export QEMU_DISPLAY=egl-headless
-export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
-export QEMU_HOST_ADB_PORT=6520
-/home/azureuser/aosp/scripts/run_plain_qemu.sh
-```
-
-If the runtime host has a desktop session and working GL windowing, this is
-also reasonable:
-
-```bash
-export QEMU_DISPLAY='gtk,gl=on'
-export QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280'
-```
-
-Important detail:
-
-- the guest still boots from the same `kernel`, `initrd.img`, and `os-disk.raw`
-- only the host-side QEMU display and GPU device selection changes
-
-## Step 5: Headless Validation On The Build Machine
-
-Yes, partial validation is possible without host graphics.
-
-Use:
-
-```bash
-cd /home/azureuser/aosp
-export QEMU_DISPLAY=none
-export QEMU_GPU_DEVICE='virtio-gpu-pci,id=gpu0,xres=720,yres=1280'
-export QEMU_HOST_ADB_PORT=6520
-timeout 120s ./scripts/run_plain_qemu.sh
-```
-
-This is useful to validate:
-
-- kernel boot
-- init and early userspace
-- dynamic-partition activation
-- vendor APEX mounting
-- `zygote`
-- `adbd`
-
-This is not a full product validation because SurfaceFlinger and related
-graphics services still depend on a real runtime host graphics backend.
-
-Use a non-emulator host ADB port such as `6520`. Forwarding guest `5555` to
-host `5555` collides with ADB's built-in emulator port scan and can produce a
-misleading offline `emulator-5554` transport on the host.
-
-## Step 5A: Software-Rendered Host Graphics On A No-GPU Server
-
-If the server has no physical GPU, QEMU can still be given a software OpenGL
-host path with Xvfb plus Mesa llvmpipe.
-
-Install:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y xvfb mesa-utils mesa-utils-bin
-```
-
-Sanity-check the host renderer:
-
-```bash
-xvfb-run -s '-screen 0 1280x1024x24' \
-  bash -lc 'LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B'
-```
-
-Expected renderer:
-
-- `OpenGL renderer string: llvmpipe`
-
-Launch QEMU with software-rendered host GL:
-
-```bash
-cd /home/azureuser/aosp
-xvfb-run -s '-screen 0 1280x1024x24' \
-  bash -lc "LIBGL_ALWAYS_SOFTWARE=1 \
-    GALLIUM_DRIVER=llvmpipe \
-    QEMU_DISPLAY='gtk,gl=on' \
-    QEMU_GPU_DEVICE='virtio-gpu-gl-pci,id=gpu0,xres=720,yres=1280' \
-    QEMU_HOST_ADB_PORT=6520 \
-    ./scripts/run_plain_qemu.sh"
-```
-
-Important limitation:
-
-- this host does not have `/dev/dri/renderD*`, so `QEMU_DISPLAY=egl-headless`
-  cannot be used here
-- `gtk,gl=on` under `Xvfb` does work with llvmpipe on this machine
-- however, with the current image, `surfaceflinger` still crashes repeatedly
-  even with host-side software GL
-
-So host-side software rendering is possible, but it does not by itself solve
-the current guest image issue.
-
-## What Headless Validation Already Proved
-
-On the build machine, direct plain-QEMU boot already proved that:
-
-- the image boots without the cuttlefish harness
-- the duplicate vendor APEX packaging issues are resolved
-- the guest reaches Android userspace
-- `adbd` starts
-
-The later SurfaceFlinger failures on the builder should be treated as a runtime
-host limitation unless they can also be reproduced on a GPU-capable target host.
-
-## Current Builder-Side Caveats
-
-The builder-side serial log still shows some expected limitations:
-
-- `surfaceflinger` aborts later in boot
-- `vendor.light-cuttlefish` aborts
-- `vendor.threadnetwork_hal` aborts
-
-Those are not sufficient on their own to justify changing the built image
-again, because they are being observed on a host that is not suitable for final
-graphics validation.
-
-## If A Full No-GPU Validation Target Is Required
-
-If you want a product that can fully boot to a meaningful validated state on a
-host with no GPU backend at all, that is a different deliverable.
-
-That would require a separate headless flavor that deliberately removes or
-disables some graphics-dependent services, likely including:
-
-- graphics composer
-- light HAL pieces tied to cuttlefish display plumbing
-- possibly additional display-related vendor configuration
-
-That work would be source changes plus a rebuild. It is not the same thing as
-validating the current GPU-intended artifact.
+- the current source pruning is focused on bootability without the cuttlefish
+  harness
+- it already disables the light HAL and Thread network for this QEMU product
+- it also stops `socket_vsock_proxy`, `setup_wifi`, and `init_wifi_sh`
+- it does not try to remove every inherited cuttlefish package from the image
 
 ## Files Involved
 

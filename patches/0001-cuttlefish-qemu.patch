@@ -11,7 +11,7 @@ index 047cc45..b08d5d4 100644
  	aosp_cf_arm64_only_phone_hwasan:$(LOCAL_DIR)/vsoc_arm64_only/phone/aosp_cf_hwasan.mk \
  	aosp_cf_arm64_minidroid:$(LOCAL_DIR)/vsoc_arm64_minidroid/aosp_cf.mk \
 diff --git a/shared/device.mk b/shared/device.mk
-index 9a49abd..e38919f 100644
+index 9a49abd..8ccaeb8 100644
 --- a/shared/device.mk
 +++ b/shared/device.mk
 @@ -378,9 +378,13 @@ PRODUCT_PACKAGES += $(LOCAL_DUMPSTATE_PRODUCT_PACKAGE)
@@ -48,6 +48,19 @@ index 9a49abd..e38919f 100644
  
  # Indicate that KeyMint includes support for the ATTEST_KEY key purpose.
  PRODUCT_COPY_FILES += \
+@@ -604,9 +612,12 @@ PRODUCT_PACKAGES += \
+ $(call soong_config_set_bool,cuttlefish_config,use_pci_ids,true)
+ 
+ # Thread Network AIDL HAL and Demo App
++LOCAL_ENABLE_THREADNETWORK ?= true
++ifeq ($(LOCAL_ENABLE_THREADNETWORK),true)
+ PRODUCT_PACKAGES += \
+     com.android.hardware.threadnetwork \
+     ThreadNetworkDemoApp
++endif
+ 
+ PRODUCT_CHECK_VENDOR_SEAPP_VIOLATIONS := true
+ 
 diff --git a/shared/graphics/device_vendor.mk b/shared/graphics/device_vendor.mk
 index d50434f..37436c8 100644
 --- a/shared/graphics/device_vendor.mk
@@ -68,6 +81,85 @@ index d50434f..37436c8 100644
  
  PRODUCT_VENDOR_PROPERTIES += \
      ro.vendor.hwcomposer.pmem=/dev/block/pmem1
+diff --git a/shared/phone/device_vendor.mk b/shared/phone/device_vendor.mk
+index 678c640..a6cb1b8 100644
+--- a/shared/phone/device_vendor.mk
++++ b/shared/phone/device_vendor.mk
+@@ -37,7 +37,10 @@ $(call inherit-product, device/google/cuttlefish/shared/secure_element/device_ve
+ $(call inherit-product, device/google/cuttlefish/shared/swiftshader/device_vendor.mk)
+ $(call inherit-product, device/google/cuttlefish/shared/telephony/device_vendor.mk)
+ $(call inherit-product, device/google/cuttlefish/shared/sensors/device_vendor.mk)
++LOCAL_ENABLE_VIRGL ?= true
++ifeq ($(LOCAL_ENABLE_VIRGL),true)
+ $(call inherit-product, device/google/cuttlefish/shared/virgl/device_vendor.mk)
++endif
+ $(call inherit-product, device/google/cuttlefish/shared/device.mk)
+ 
+ # Loads the camera HAL and which set of cameras is required.
+diff --git a/vsoc_arm64_only/phone/aosp_cf_qemu.mk b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
+new file mode 100644
+index 0000000..e8d9bb4
+--- /dev/null
++++ b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
+@@ -0,0 +1,58 @@
++#
++# Copyright (C) 2024 The Android Open Source Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++# QEMU flavor: inherits stock arm64-only phone and adds a small set of QEMU-
++# specific deltas that do not require replacing inherited product lists.
++
++# Keep the direct QEMU image on purely in-guest security HALs.
++TRUSTY_SYSTEM_VM := disabled
++LOCAL_GATEKEEPER_PRODUCT_PACKAGES := com.android.hardware.gatekeeper.nonsecure
++LOCAL_KEYMINT_PRODUCT_PACKAGES := com.android.hardware.keymint.rust_nonsecure
++LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES := com.android.hardware.graphics.composer.ranchu
++LOCAL_ENABLE_LIGHT := false
++LOCAL_ENABLE_THREADNETWORK := false
++
++$(call inherit-product, device/google/cuttlefish/vsoc_arm64_only/phone/aosp_cf.mk)
++
++PRODUCT_NAME := aosp_cf_arm64_only_phone_qemu
++PRODUCT_MODEL := Cuttlefish arm64 phone 64-bit only (QEMU)
++
++# ---------------------------------------------------------------------------
++# ADB over TCP (no vsock transport)
++# ---------------------------------------------------------------------------
++PRODUCT_VENDOR_PROPERTIES += \
++    persist.adb.tcp.port=5555 \
++    ro.vendor.disable_rename_eth0=1
++
++# ---------------------------------------------------------------------------
++# QEMU-specific metadata
++# ---------------------------------------------------------------------------
++PRODUCT_VENDOR_PROPERTIES += \
++    ro.cuttlefish.guest_profile=cuttlefish-qemu \
++    ro.cuttlefish.adb_transport=rawTcp \
++    ro.cuttlefish.guest_adb_port=5555
++
++# ---------------------------------------------------------------------------
++# Graphics: do not bake in a read-only backend choice here. The actual guest
++# graphics backend is selected at launch time via androidboot.hardware.* so the
++# same image can be used with software rendering, virgl, or gfxstream-capable
++# hosts.
++# ---------------------------------------------------------------------------
++# ---------------------------------------------------------------------------
++# Additional QEMU init adjustments layered on top of stock cuttlefish init
++# ---------------------------------------------------------------------------
++PRODUCT_PACKAGES += \
++    device_google_cuttlefish_qemu_config_init_vendor_rc
 diff --git a/shared/config/qemu/Android.bp b/shared/config/qemu/Android.bp
 new file mode 100644
 index 0000000..b2e9384
@@ -120,65 +212,3 @@ index 0000000..e7a9644
 +
 +on boot
 +    stop socket_vsock_proxy
-diff --git a/vsoc_arm64_only/phone/aosp_cf_qemu.mk b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
-new file mode 100644
-index 0000000..6232ec2
---- /dev/null
-+++ b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
-@@ -0,0 +1,56 @@
-+#
-+# Copyright (C) 2024 The Android Open Source Project
-+#
-+# Licensed under the Apache License, Version 2.0 (the "License");
-+# you may not use this file except in compliance with the License.
-+# You may obtain a copy of the License at
-+#
-+#      http://www.apache.org/licenses/LICENSE-2.0
-+#
-+# Unless required by applicable law or agreed to in writing, software
-+# distributed under the License is distributed on an "AS IS" BASIS,
-+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+# See the License for the specific language governing permissions and
-+# limitations under the License.
-+#
-+
-+# QEMU flavor: inherits stock arm64-only phone and adds a small set of QEMU-
-+# specific deltas that do not require replacing inherited product lists.
-+
-+# Keep the direct QEMU image on purely in-guest security HALs.
-+TRUSTY_SYSTEM_VM := disabled
-+LOCAL_GATEKEEPER_PRODUCT_PACKAGES := com.android.hardware.gatekeeper.nonsecure
-+LOCAL_KEYMINT_PRODUCT_PACKAGES := com.android.hardware.keymint.rust_nonsecure
-+LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES := com.android.hardware.graphics.composer.ranchu
-+
-+$(call inherit-product, device/google/cuttlefish/vsoc_arm64_only/phone/aosp_cf.mk)
-+
-+PRODUCT_NAME := aosp_cf_arm64_only_phone_qemu
-+PRODUCT_MODEL := Cuttlefish arm64 phone 64-bit only (QEMU)
-+
-+# ---------------------------------------------------------------------------
-+# ADB over TCP (no vsock transport)
-+# ---------------------------------------------------------------------------
-+PRODUCT_VENDOR_PROPERTIES += \
-+    persist.adb.tcp.port=5555 \
-+    ro.vendor.disable_rename_eth0=1
-+
-+# ---------------------------------------------------------------------------
-+# QEMU-specific metadata
-+# ---------------------------------------------------------------------------
-+PRODUCT_VENDOR_PROPERTIES += \
-+    ro.cuttlefish.guest_profile=cuttlefish-qemu \
-+    ro.cuttlefish.adb_transport=rawTcp \
-+    ro.cuttlefish.guest_adb_port=5555
-+
-+# ---------------------------------------------------------------------------
-+# Graphics: keep both gfxstream and virgl/Mesa, default to virgl
-+# ---------------------------------------------------------------------------
-+PRODUCT_VENDOR_PROPERTIES += \
-+    ro.hardware.egl=mesa
-+
-+# ---------------------------------------------------------------------------
-+# Additional QEMU init adjustments layered on top of stock cuttlefish init
-+# ---------------------------------------------------------------------------
-+PRODUCT_PACKAGES += \
-+    device_google_cuttlefish_qemu_config_init_vendor_rc
