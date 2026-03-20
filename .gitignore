@@ -3,3 +3,4 @@ plain-qemu/
 qemu-ready/
 tmp/
 __pycache__/
+release-assets/
