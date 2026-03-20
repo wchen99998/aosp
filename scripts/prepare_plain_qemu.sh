@@ -7,6 +7,15 @@ HOSTBIN=${HOSTBIN:-$ROOT/src/out/host/linux-x86/bin}
 STAGE=${STAGE:-$ROOT/plain-qemu}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_UNPACK_BOOTIMG=${LOCAL_UNPACK_BOOTIMG:-$SCRIPT_DIR/unpack_bootimg.py}
+QEMU_BOOT_HARDWARE_HWCOMPOSER=${QEMU_BOOT_HARDWARE_HWCOMPOSER:-ranchu}
+QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER:-}
+QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD:-}
+QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND:-}
+QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER:-}
+
+# Debian commonly installs mke2fs and sgdisk under /usr/sbin, which may be
+# absent from PATH in non-login shells.
+export PATH="$PATH:/usr/sbin:/sbin"
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -21,6 +30,20 @@ require_file() {
     echo "missing required input file: $path" >&2
     exit 1
   }
+}
+
+graphics_composer_apex_for_hwcomposer() {
+  case "$1" in
+    drm_hwcomposer)
+      echo "com.android.hardware.graphics.composer.drm_hwcomposer"
+      ;;
+    ranchu|"")
+      echo "com.android.hardware.graphics.composer.ranchu"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
 }
 
 first_existing() {
@@ -75,6 +98,12 @@ UNPACK_BOOTIMG=$(resolve_tool unpack_bootimg)
 MKE2FS=$(command -v mke2fs)
 SGDISK=$(command -v sgdisk)
 
+if [[ -z "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
+  QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=$(
+    graphics_composer_apex_for_hwcomposer "$QEMU_BOOT_HARDWARE_HWCOMPOSER"
+  )
+fi
+
 for file in \
   "$OUT/boot.img" \
   "$OUT/init_boot.img" \
@@ -127,7 +156,7 @@ truncate -s 1M "$STAGE/frp.img"
 truncate -s 64M "$STAGE/metadata.img"
 "$MKE2FS" -q -t ext4 -F "$STAGE/metadata.img"
 
-cat >"$STAGE/bootconfig.extra.txt" <<'EOF'
+cat >"$STAGE/bootconfig.extra.txt" <<EOF
 androidboot.hardware=cutf_cvm
 androidboot.serialno=CUTTLEFISHCVD01
 androidboot.lcd_density=320
@@ -150,8 +179,23 @@ androidboot.vsock_lights_cid=3
 androidboot.vsock_lights_port=6900
 androidboot.vendor.apex.com.android.hardware.keymint=com.android.hardware.keymint.rust_nonsecure
 androidboot.vendor.apex.com.android.hardware.gatekeeper=com.android.hardware.gatekeeper.nonsecure
-androidboot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu
 EOF
+
+if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
+  echo "androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}" >>"$STAGE/bootconfig.extra.txt"
+fi
+
+if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER" ]]; then
+  echo "androidboot.hardware.guest_hwui_renderer=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER}" >>"$STAGE/bootconfig.extra.txt"
+fi
+
+if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD" ]]; then
+  echo "androidboot.hardware.guest_disable_renderer_preload=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD}" >>"$STAGE/bootconfig.extra.txt"
+fi
+
+if [[ -n "$QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND" ]]; then
+  echo "androidboot.debug.renderengine.backend=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND}" >>"$STAGE/bootconfig.extra.txt"
+fi
 
 cat "$STAGE/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$STAGE/bootconfig.combined.txt"
 
@@ -250,7 +294,7 @@ for i in "${!PART_NAMES[@]}"; do
 done
 
 cat >"$STAGE/kernel.cmdline" <<'EOF'
-console=hvc0 earlycon=pl011,mmio32,0x9000000 printk.devkmsg=on audit=1 panic=-1 8250.nr_uarts=1 cma=0 firmware_class.path=/vendor/etc/ loop.max_part=7 init=/init bootconfig androidboot.boot_devices=4010000000.pcie
+console=hvc0 earlycon=pl011,mmio32,0x9000000 printk.devkmsg=on audit=1 panic=-1 8250.nr_uarts=1 cma=0 firmware_class.path=/vendor/etc/ loop.max_part=7 init=/init bootconfig androidboot.hardware=cutf_cvm androidboot.serialno=CUTTLEFISHCVD01 androidboot.boot_devices=4010000000.pcie androidboot.slot_suffix=_a androidboot.force_normal_boot=1 androidboot.verifiedbootstate=orange androidboot.fstab_suffix=cf.f2fs.hctr2 androidboot.serialconsole=0
 EOF
 
 cat >"$STAGE/README.txt" <<EOF

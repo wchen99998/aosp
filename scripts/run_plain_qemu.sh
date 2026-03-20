@@ -25,7 +25,11 @@ QEMU_BOOT_HARDWARE_HWCOMPOSER=${QEMU_BOOT_HARDWARE_HWCOMPOSER:-ranchu}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE=${QEMU_BOOT_HARDWARE_HWCOMPOSER_MODE:-client}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE=${QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FINDER_MODE:-drm}
 QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT=${QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT:-rgba}
+QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER:-}
+QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD:-}
 QEMU_BOOT_HARDWARE_VULKAN=${QEMU_BOOT_HARDWARE_VULKAN:-ranchu}
+QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND:-}
+QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER:-}
 QEMU_BOOT_LCD_DENSITY=${QEMU_BOOT_LCD_DENSITY:-320}
 QEMU_BOOT_OPENGLES_VERSION=${QEMU_BOOT_OPENGLES_VERSION:-196609}
 QEMU_BOOT_HARDWARE_GLTRANSPORT=${QEMU_BOOT_HARDWARE_GLTRANSPORT:-}
@@ -37,6 +41,20 @@ require_file() {
     echo "missing required staged file: $path" >&2
     exit 1
   }
+}
+
+graphics_composer_apex_for_hwcomposer() {
+  case "$1" in
+    drm_hwcomposer)
+      echo "com.android.hardware.graphics.composer.drm_hwcomposer"
+      ;;
+    ranchu|"")
+      echo "com.android.hardware.graphics.composer.ranchu"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
 }
 
 if [[ ! -x "$QEMU" ]]; then
@@ -52,7 +70,20 @@ for file in \
   require_file "$file"
 done
 
+if [[ -z "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
+  QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=$(
+    graphics_composer_apex_for_hwcomposer "$QEMU_BOOT_HARDWARE_HWCOMPOSER"
+  )
+fi
+
 CMDLINE=$(tr '\n' ' ' <"$STAGE/kernel.cmdline" | sed 's/[[:space:]]\+/ /g')
+CMDLINE+=" androidboot.hardware=cutf_cvm"
+CMDLINE+=" androidboot.serialno=CUTTLEFISHCVD01"
+CMDLINE+=" androidboot.slot_suffix=${QEMU_BOOT_SLOT_SUFFIX}"
+CMDLINE+=" androidboot.force_normal_boot=${QEMU_BOOT_FORCE_NORMAL_BOOT}"
+CMDLINE+=" androidboot.verifiedbootstate=${QEMU_BOOT_VERIFIEDBOOTSTATE}"
+CMDLINE+=" androidboot.fstab_suffix=${QEMU_BOOT_FSTAB_SUFFIX}"
+CMDLINE+=" androidboot.serialconsole=${QEMU_BOOT_SERIALCONSOLE}"
 CMDLINE+=" androidboot.cpuvulkan.version=${QEMU_BOOT_CPUVULKAN_VERSION}"
 CMDLINE+=" androidboot.hardware.egl=${QEMU_BOOT_HARDWARE_EGL}"
 CMDLINE+=" androidboot.hardware.gralloc=${QEMU_BOOT_HARDWARE_GRALLOC}"
@@ -62,11 +93,25 @@ CMDLINE+=" androidboot.hardware.hwcomposer.display_finder_mode=${QEMU_BOOT_HARDW
 CMDLINE+=" androidboot.hardware.hwcomposer.display_framebuffer_format=${QEMU_BOOT_HARDWARE_HWCOMPOSER_DISPLAY_FRAMEBUFFER_FORMAT}"
 CMDLINE+=" androidboot.lcd_density=${QEMU_BOOT_LCD_DENSITY}"
 CMDLINE+=" androidboot.opengles.version=${QEMU_BOOT_OPENGLES_VERSION}"
+CMDLINE+=" androidboot.vendor.apex.com.android.hardware.keymint=com.android.hardware.keymint.rust_nonsecure"
+CMDLINE+=" androidboot.vendor.apex.com.android.hardware.gatekeeper=com.android.hardware.gatekeeper.nonsecure"
 if [[ -n "$QEMU_BOOT_HARDWARE_VULKAN" ]]; then
   CMDLINE+=" androidboot.hardware.vulkan=${QEMU_BOOT_HARDWARE_VULKAN}"
 fi
 if [[ -n "$QEMU_BOOT_HARDWARE_GLTRANSPORT" ]]; then
   CMDLINE+=" androidboot.hardware.gltransport=${QEMU_BOOT_HARDWARE_GLTRANSPORT}"
+fi
+if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER" ]]; then
+  CMDLINE+=" androidboot.hardware.guest_hwui_renderer=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER}"
+fi
+if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD" ]]; then
+  CMDLINE+=" androidboot.hardware.guest_disable_renderer_preload=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD}"
+fi
+if [[ -n "$QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND" ]]; then
+  CMDLINE+=" androidboot.debug.renderengine.backend=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND}"
+fi
+if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
+  CMDLINE+=" androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}"
 fi
 INITRD="$STAGE/initrd.img"
 mkdir -p "$QEMU_RUN_DIR"
@@ -112,7 +157,6 @@ androidboot.lcd_density=${QEMU_BOOT_LCD_DENSITY}
 androidboot.opengles.version=${QEMU_BOOT_OPENGLES_VERSION}
 androidboot.vendor.apex.com.android.hardware.keymint=com.android.hardware.keymint.rust_nonsecure
 androidboot.vendor.apex.com.android.hardware.gatekeeper=com.android.hardware.gatekeeper.nonsecure
-androidboot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu
 EOF
 
   if [[ -n "$QEMU_BOOT_HARDWARE_VULKAN" ]]; then
@@ -121,6 +165,22 @@ EOF
 
   if [[ -n "$QEMU_BOOT_HARDWARE_GLTRANSPORT" ]]; then
     echo "androidboot.hardware.gltransport=${QEMU_BOOT_HARDWARE_GLTRANSPORT}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
+  fi
+
+  if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER" ]]; then
+    echo "androidboot.hardware.guest_hwui_renderer=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
+  fi
+
+  if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD" ]]; then
+    echo "androidboot.hardware.guest_disable_renderer_preload=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
+  fi
+
+  if [[ -n "$QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND" ]]; then
+    echo "androidboot.debug.renderengine.backend=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
+  fi
+
+  if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
+    echo "androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
   fi
 
   cat "$QEMU_RUN_DIR/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$QEMU_RUN_DIR/bootconfig.combined.txt"
