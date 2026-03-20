@@ -12,3 +12,7 @@ graphics-contract flow in this workspace.
 
 - [Build and bundle flow](BUILD.md)
 - [Plain-QEMU boot flow](BOOT.md)
+
+## Releases
+
+- [v0.1.1 release notes](releases/v0.1.1.md)
