@@ -17,6 +17,15 @@ product.
   matches the selected composer backend.
 - Confirm `getprop ro.hardware.hwcomposer` matches the intended product choice.
 
+## Gralloc Checks
+
+- Confirm `getprop ro.hardware.gralloc` returns the expected backend
+  (`minigbm` for plain-QEMU, `ranchu` for gfxstream hosts).
+- Confirm the matching allocator service is running
+  (`ps -A | grep allocator`).
+- Do not use `ranchu` gralloc on plain-QEMU — it requires a gfxstream host
+  pipe and will crash SurfaceFlinger.
+
 ## Refresh-Policy Checks
 
 - Confirm `cmd overlay lookup android android:integer/config_defaultPeakRefreshRate`
@@ -54,6 +63,12 @@ product.
 - Confirm `QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER` maps to the matching
   composer APEX, or is derived from `QEMU_BOOT_HARDWARE_HWCOMPOSER` when left
   unset.
+- Confirm `QEMU_BOOT_HARDWARE_GRALLOC` maps to
+  `androidboot.hardware.gralloc`.
+- Confirm `QEMU_BOOT_VENDOR_APEX_GRALLOC` maps to the matching gralloc APEX,
+  or is derived from `QEMU_BOOT_HARDWARE_GRALLOC` when left unset
+  (`minigbm` → `com.google.cf.gralloc`,
+  `ranchu` → `com.google.cf.gralloc.ranchu`).
 
 ## Interpretation
 

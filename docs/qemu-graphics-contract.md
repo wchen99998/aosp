@@ -15,6 +15,8 @@ following boot properties:
 - `androidboot.debug.renderengine.backend`
 - `androidboot.hardware.hwcomposer`
 - `androidboot.vendor.apex.com.android.hardware.graphics.composer`
+- `androidboot.hardware.gralloc`
+- `androidboot.vendor.apex.com.google.cf.gralloc`
 - `androidboot.lcd_density`
 
 The guest-side init fragment promotes these values before the first
@@ -58,6 +60,21 @@ Current runtime caveat on this branch:
 - `dumpsys display` still reports `renderFrameRate 75.0` until the host/display
   mode contract is updated to expose a 120 Hz mode
 
+## Gralloc Stack
+
+The QEMU product ships both gralloc backends:
+
+- `minigbm` — the Cuttlefish default, packaged in the `com.google.cf.gralloc`
+  APEX. Works with plain QEMU and software-GL hosts.
+- `ranchu` — the gfxstream-native gralloc
+  (`android.hardware.graphics.allocator-service.ranchu` and `mapper.ranchu`).
+  Requires a gfxstream/rutabaga-capable QEMU host.
+
+The active backend is selected at boot via `QEMU_BOOT_HARDWARE_GRALLOC`, which
+maps to `androidboot.hardware.gralloc`. The plain-QEMU launcher defaults to
+`minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` when running on a
+gfxstream-capable host.
+
 ## Why Composer Selection Is Product-Backed
 
 The QEMU product was previously hard-pinned to Ranchu in product packaging.
@@ -85,11 +102,18 @@ manager:
 - `QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND`
 - `QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER`
 - `QEMU_BOOT_HARDWARE_HWCOMPOSER`
+- `QEMU_BOOT_HARDWARE_GRALLOC`
+- `QEMU_BOOT_VENDOR_APEX_GRALLOC`
 - `QEMU_BOOT_LCD_DENSITY`
 
 The scripts derive `androidboot.vendor.apex.com.android.hardware.graphics.composer`
 from `QEMU_BOOT_HARDWARE_HWCOMPOSER` when no explicit APEX is provided, so the
 boot-time APEX and the selected composer backend stay aligned.
+
+The scripts derive `androidboot.vendor.apex.com.google.cf.gralloc` from
+`QEMU_BOOT_HARDWARE_GRALLOC` when no explicit APEX is provided, mapping
+`minigbm` to `com.google.cf.gralloc` and `ranchu` to
+`com.google.cf.gralloc.ranchu`.
 
 On this host, the launcher also mirrors critical early-boot args onto the
 kernel cmdline, including `androidboot.force_normal_boot`, because bootconfig

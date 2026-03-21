@@ -21,7 +21,7 @@ The latest verified path on this workspace booted a bundle extracted from
 
 Validated setup on this host:
 
-- date: `2026-03-20`
+- date: `2026-03-21`
 - host display: `xvfb-run`
 - host GL: Mesa `llvmpipe`
 - guest graphics launch: `QEMU_DISPLAY=gtk`
@@ -40,6 +40,11 @@ Observed properties on the validated run:
 - `ro.hardware.hwcomposer=ranchu`
 - `ro.hardware.vulkan=pastel`
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu`
+- `ro.boot.vendor.apex.com.google.cf.gralloc=com.google.cf.gralloc`
+
+The image ships both gralloc backends (`minigbm` and `ranchu`). The default
+for plain-QEMU is `minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` to use
+the gfxstream-native gralloc on a gfxstream-capable host.
 
 The same bundle can also be staged from a release archive under
 `release-assets/` and then booted with the same launcher.
@@ -153,6 +158,9 @@ Expected checks:
 - `ro.zygote.disable_gl_preload` reflects the renderer-preload setting.
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer` matches the
   composer backend the launcher selected.
+- `ro.boot.vendor.apex.com.google.cf.gralloc` matches the gralloc backend
+  the launcher selected (`com.google.cf.gralloc` for minigbm,
+  `com.google.cf.gralloc.ranchu` for gfxstream).
 - `ro.hardware.hwcomposer` matches the intended product/backend choice.
 - the QEMU guest overlay resolves both `config_defaultPeakRefreshRate` and
   `config_defaultRefreshRate` to `120`.
