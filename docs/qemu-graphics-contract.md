@@ -63,18 +63,19 @@ Current runtime caveat on this branch:
 
 The QEMU product ships both gralloc backends:
 
-- `minigbm` — the Cuttlefish default, packaged in the `com.google.cf.gralloc`
-  APEX. Works with plain QEMU and software-GL hosts.
+- `minigbm` — the Cuttlefish default, installed as a direct vendor allocator
+  service. Works with plain QEMU and software-GL hosts.
 - `ranchu` — the gfxstream-native gralloc
   (`android.hardware.graphics.allocator-service.ranchu` and `mapper.ranchu`).
   Requires a gfxstream/rutabaga-capable QEMU host.
 
 The active backend is selected at boot via `QEMU_BOOT_HARDWARE_GRALLOC`, which
 maps to `androidboot.hardware.gralloc` and then to `ro.hardware.gralloc`. The
-QEMU init fragment (`init.vendor.qemu.rc`) stops the default minigbm allocator
-and starts the ranchu one when `ro.hardware.gralloc=ranchu`. The plain-QEMU
-launcher defaults to `minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` when
-running on a gfxstream-capable host.
+QEMU init fragment (`init.vendor.qemu.rc`) keys off
+`ro.boot.hardware.gralloc=ranchu` during `early-init`, stops the default
+minigbm allocator, and enables the ranchu one before the HAL class starts. The
+plain-QEMU launcher defaults to `minigbm`. Set
+`QEMU_BOOT_HARDWARE_GRALLOC=ranchu` when running on a gfxstream-capable host.
 
 ## Why Composer Selection Is Product-Backed
 

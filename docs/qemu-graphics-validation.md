@@ -65,8 +65,9 @@ product.
   unset.
 - Confirm `QEMU_BOOT_HARDWARE_GRALLOC` maps to
   `androidboot.hardware.gralloc` and then to `ro.hardware.gralloc`.
-- When `ro.hardware.gralloc=ranchu`, confirm the QEMU init fragment stopped
-  `vendor.graphics.allocator` and started `vendor.graphics.allocator.ranchu`.
+- When `QEMU_BOOT_HARDWARE_GRALLOC=ranchu`, confirm the QEMU init fragment
+  used `ro.boot.hardware.gralloc` during `early-init` to stop
+  `vendor.graphics.allocator` and enable `vendor.graphics.allocator.ranchu`.
 
 ## Interpretation
 

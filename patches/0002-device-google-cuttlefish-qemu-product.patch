@@ -235,13 +235,35 @@ new file mode 100644
 index 0000000..e7a9644
 --- /dev/null
 +++ b/shared/config/qemu/init.vendor.qemu.rc
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,36 @@
 +# QEMU-specific init deltas layered on top of init.cutf_cvm.rc.
 +#
 +# This file intentionally avoids replacing the stock cuttlefish init module,
 +# which causes an install-path conflict during the build. The goal here is to
 +# keep the build graph valid while applying a few runtime adjustments that are
 +# harmless if the corresponding services are absent.
++
++on early-init && property:ro.boot.debug.renderengine.backend=*
++    # Promote the boot-time RenderEngine request before SurfaceFlinger starts.
++    setprop debug.renderengine.backend ${ro.boot.debug.renderengine.backend}
++
++# Ranchu (gfxstream-native) gralloc allocator — started only when the
++# launcher sets androidboot.hardware.gralloc=ranchu. The default minigbm
++# allocator (vendor.graphics.allocator from allocator.rc) is stopped first.
++# Use the boot property here because the derived ro.hardware.gralloc property
++# is populated by a later early-init action.
++service vendor.graphics.allocator.ranchu /vendor/bin/hw/android.hardware.graphics.allocator-service.ranchu
++    class hal animation
++    user system
++    group graphics drmrpc
++    capabilities SYS_NICE
++    onrestart restart surfaceflinger
++    task_profiles ServiceCapacityLow
++    disabled
++
++on early-init && property:ro.boot.hardware.gralloc=ranchu
++    stop vendor.graphics.allocator
++    enable vendor.graphics.allocator.ranchu
 +
 +on post-fs-data
 +    stop setup_wifi
