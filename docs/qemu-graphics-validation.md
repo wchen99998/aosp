@@ -19,8 +19,15 @@ product.
 
 ## Refresh-Policy Checks
 
-- Confirm `dumpsys display` reports `renderFrameRate 75.0` and supported
-  refresh rates that include `75.0`, `37.5`, and `25.0`.
+- Confirm `cmd overlay lookup android android:integer/config_defaultPeakRefreshRate`
+  returns `120`.
+- Confirm `cmd overlay lookup android android:integer/config_defaultRefreshRate`
+  returns `120`.
+- On the currently validated plain-QEMU/ranchu path, confirm `dumpsys display`
+  still reports `renderFrameRate 75.0` and supported refresh rates that include
+  `75.0`, `37.5`, and `25.0`.
+- Treat the remaining 75 Hz runtime cap as a host/display-mode advertisement
+  problem once the overlay values above are correct.
 - Confirm `ro.surface_flinger.game_default_frame_rate_override=0` at runtime.
 - Confirm `debug.graphics.game_default_frame_rate.disabled=true` at runtime.
 - Treat `persist.graphics.game_default_frame_rate.enabled` as a build-time

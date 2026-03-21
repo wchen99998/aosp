@@ -30,9 +30,9 @@ which SurfaceFlinger and zygote still see the contract cleanly.
 
 ## Why The QEMU Product Is Refresh-Driven
 
-The QEMU product is intended to validate a 75 Hz display policy, so the
-framework should treat 75 Hz as the device preference rather than letting a
-generic 60 Hz default dominate.
+The QEMU product image now targets a 120 Hz display policy, so the framework
+defaults in the guest should prefer 120 Hz rather than letting a generic 60 Hz
+default dominate.
 
 On this branch, the runtime knobs that actually expressed the policy on the
 verified image were:
@@ -45,9 +45,18 @@ product build.prop, but it was empty at runtime on the verified image. Treat the
 runtime properties above as the effective policy signal on this branch.
 
 The product still uses a QEMU-only framework overlay to keep the framework
-targeted at 75 Hz, and the fixed `SurfaceFlinger` aconfig guard still reports
-`game_default_frame_rate: true`. Do not use that log line alone as evidence that
-the product policy failed.
+targeted at 120 Hz by setting both
+`config_defaultPeakRefreshRate` and `config_defaultRefreshRate` to `120`, and
+the fixed `SurfaceFlinger` aconfig guard still reports
+`game_default_frame_rate: true`. Do not use that log line alone as evidence
+that the product policy failed.
+
+Current runtime caveat on this branch:
+
+- the plain-QEMU/ranchu path still advertises only a 75 Hz mode at runtime
+- `cmd overlay lookup` resolves the guest defaults to `120`
+- `dumpsys display` still reports `renderFrameRate 75.0` until the host/display
+  mode contract is updated to expose a 120 Hz mode
 
 ## Why Composer Selection Is Product-Backed
 

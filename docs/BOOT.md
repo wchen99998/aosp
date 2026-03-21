@@ -135,6 +135,8 @@ After boot, confirm the graphics contract landed before SurfaceFlinger starts:
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell getprop ro.zygote.disable_gl_preload
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell getprop ro.hardware.hwcomposer
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell getprop ro.boot.vendor.apex.com.android.hardware.graphics.composer
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell cmd overlay lookup android android:integer/config_defaultPeakRefreshRate
+/home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell cmd overlay lookup android android:integer/config_defaultRefreshRate
 /home/azureuser/aosp/src/out/host/linux-x86/bin/adb -s 127.0.0.1:6550 shell dumpsys display | grep -E 'renderFrameRate|supportedRefreshRates'
 ```
 
@@ -152,8 +154,13 @@ Expected checks:
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer` matches the
   composer backend the launcher selected.
 - `ro.hardware.hwcomposer` matches the intended product/backend choice.
-- `dumpsys display` reports `renderFrameRate 75.0` and supported refresh rates
-  that include `75.0`, `37.5`, and `25.0`.
+- the QEMU guest overlay resolves both `config_defaultPeakRefreshRate` and
+  `config_defaultRefreshRate` to `120`.
+- on the currently validated plain-QEMU/ranchu path, `dumpsys display` still
+  reports `renderFrameRate 75.0` and supported refresh rates that include
+  `75.0`, `37.5`, and `25.0`.
+- treat the remaining 75 Hz runtime cap as a host/display-mode issue, not a
+  guest overlay issue.
 
 ## Check Boot Completion
 

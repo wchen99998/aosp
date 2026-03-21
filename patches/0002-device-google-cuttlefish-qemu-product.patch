@@ -154,6 +154,82 @@ index 0000000..b2e9384
 +    vendor: true,
 +    relative_install_path: "init",
 +}
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/Android.bp b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
+new file mode 100644
+index 0000000..4da6982
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
+@@ -0,0 +1,24 @@
++//
++// Copyright (C) 2026 The Android Open Source Project
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package {
++    default_applicable_licenses: ["Android-Apache-2.0"],
++}
++
++runtime_resource_overlay {
++    name: "cuttlefish_qemu_overlay_frameworks_base_core",
++    soc_specific: true,
++    sdk_version: "current",
++}
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
+new file mode 100644
+index 0000000..f820293
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
+@@ -0,0 +1,10 @@
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="android.cuttlefish.qemu.overlay">
++
++    <application android:hasCode="false" />
++
++    <overlay
++      android:targetPackage="android"
++      android:isStatic="true"
++      android:priority="3"
++      />
++</manifest>
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
+new file mode 100644
+index 0000000..9007aa0
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
+@@ -0,0 +1,24 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++** Copyright 2026 The Android Open Source Project.
++**
++** Licensed under the Apache License, Version 2.0 (the "License");
++** you may not use this file except in compliance with the License.
++** You may obtain a copy of the License at
++**
++**     http://www.apache.org/licenses/LICENSE-2.0
++**
++** Unless required by applicable law or agreed to in writing, software
++** distributed under the License is distributed on an "AS IS" BASIS,
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++** See the License for the specific language governing permissions and
++** limitations under the License.
++*/
++-->
++<resources>
++    <!-- Treat 120 Hz as the intended policy for the QEMU validation product. -->
++    <integer name="config_defaultRefreshRate">120</integer>
++    <integer name="config_defaultPeakRefreshRate">120</integer>
++</resources>
 diff --git a/shared/config/qemu/init.vendor.qemu.rc b/shared/config/qemu/init.vendor.qemu.rc
 new file mode 100644
 index 0000000..e7a9644
@@ -238,4 +314,5 @@ index 0000000..e8d9bb4
 +# Additional QEMU init adjustments layered on top of stock cuttlefish init
 +# ---------------------------------------------------------------------------
 +PRODUCT_PACKAGES += \
++    cuttlefish_qemu_overlay_frameworks_base_core \
 +    device_google_cuttlefish_qemu_config_init_vendor_rc
