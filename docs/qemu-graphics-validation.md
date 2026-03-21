@@ -64,11 +64,9 @@ product.
   composer APEX, or is derived from `QEMU_BOOT_HARDWARE_HWCOMPOSER` when left
   unset.
 - Confirm `QEMU_BOOT_HARDWARE_GRALLOC` maps to
-  `androidboot.hardware.gralloc`.
-- Confirm `QEMU_BOOT_VENDOR_APEX_GRALLOC` maps to the matching gralloc APEX,
-  or is derived from `QEMU_BOOT_HARDWARE_GRALLOC` when left unset
-  (`minigbm` → `com.google.cf.gralloc`,
-  `ranchu` → `com.google.cf.gralloc.ranchu`).
+  `androidboot.hardware.gralloc` and then to `ro.hardware.gralloc`.
+- When `ro.hardware.gralloc=ranchu`, confirm the QEMU init fragment stopped
+  `vendor.graphics.allocator` and started `vendor.graphics.allocator.ranchu`.
 
 ## Interpretation
 

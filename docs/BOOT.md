@@ -40,7 +40,6 @@ Observed properties on the validated run:
 - `ro.hardware.hwcomposer=ranchu`
 - `ro.hardware.vulkan=pastel`
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer=com.android.hardware.graphics.composer.ranchu`
-- `ro.boot.vendor.apex.com.google.cf.gralloc=com.google.cf.gralloc`
 
 The image ships both gralloc backends (`minigbm` and `ranchu`). The default
 for plain-QEMU is `minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` to use
@@ -158,10 +157,9 @@ Expected checks:
 - `ro.zygote.disable_gl_preload` reflects the renderer-preload setting.
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer` matches the
   composer backend the launcher selected.
-- `ro.boot.vendor.apex.com.google.cf.gralloc` matches the gralloc backend
-  the launcher selected (`com.google.cf.gralloc` for minigbm,
-  `com.google.cf.gralloc.ranchu` for gfxstream).
 - `ro.hardware.hwcomposer` matches the intended product/backend choice.
+- `ro.hardware.gralloc` matches the intended gralloc backend (`minigbm` or
+  `ranchu`).
 - the QEMU guest overlay resolves both `config_defaultPeakRefreshRate` and
   `config_defaultRefreshRate` to `120`.
 - on the currently validated plain-QEMU/ranchu path, `dumpsys display` still

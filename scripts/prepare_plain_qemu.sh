@@ -12,8 +12,6 @@ QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER=${QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER:
 QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD=${QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD:-}
 QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND:-}
 QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER:-}
-QEMU_BOOT_VENDOR_APEX_GRALLOC=${QEMU_BOOT_VENDOR_APEX_GRALLOC:-}
-
 # Debian commonly installs mke2fs and sgdisk under /usr/sbin, which may be
 # absent from PATH in non-login shells.
 export PATH="$PATH:/usr/sbin:/sbin"
@@ -184,10 +182,6 @@ EOF
 
 if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
   echo "androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}" >>"$STAGE/bootconfig.extra.txt"
-fi
-
-if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRALLOC" ]]; then
-  echo "androidboot.vendor.apex.com.google.cf.gralloc=${QEMU_BOOT_VENDOR_APEX_GRALLOC}" >>"$STAGE/bootconfig.extra.txt"
 fi
 
 if [[ -n "$QEMU_BOOT_HARDWARE_GUEST_HWUI_RENDERER" ]]; then

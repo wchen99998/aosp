@@ -30,7 +30,6 @@ QEMU_BOOT_HARDWARE_GUEST_DISABLE_RENDERER_PRELOAD=${QEMU_BOOT_HARDWARE_GUEST_DIS
 QEMU_BOOT_HARDWARE_VULKAN=${QEMU_BOOT_HARDWARE_VULKAN:-ranchu}
 QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND=${QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND:-}
 QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER:-}
-QEMU_BOOT_VENDOR_APEX_GRALLOC=${QEMU_BOOT_VENDOR_APEX_GRALLOC:-}
 QEMU_BOOT_LCD_DENSITY=${QEMU_BOOT_LCD_DENSITY:-320}
 QEMU_BOOT_OPENGLES_VERSION=${QEMU_BOOT_OPENGLES_VERSION:-196609}
 QEMU_BOOT_HARDWARE_GLTRANSPORT=${QEMU_BOOT_HARDWARE_GLTRANSPORT:-}
@@ -58,19 +57,6 @@ graphics_composer_apex_for_hwcomposer() {
   esac
 }
 
-gralloc_apex_for_gralloc() {
-  case "$1" in
-    ranchu)
-      echo "com.google.cf.gralloc.ranchu"
-      ;;
-    minigbm|"")
-      echo "com.google.cf.gralloc"
-      ;;
-    *)
-      echo ""
-      ;;
-  esac
-}
 
 if [[ ! -x "$QEMU" ]]; then
   echo "missing QEMU binary: $QEMU" >&2
@@ -91,11 +77,6 @@ if [[ -z "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
   )
 fi
 
-if [[ -z "$QEMU_BOOT_VENDOR_APEX_GRALLOC" ]]; then
-  QEMU_BOOT_VENDOR_APEX_GRALLOC=$(
-    gralloc_apex_for_gralloc "$QEMU_BOOT_HARDWARE_GRALLOC"
-  )
-fi
 
 CMDLINE=$(tr '\n' ' ' <"$STAGE/kernel.cmdline" | sed 's/[[:space:]]\+/ /g')
 CMDLINE+=" androidboot.hardware=cutf_cvm"
@@ -133,9 +114,6 @@ if [[ -n "$QEMU_BOOT_DEBUG_RENDERENGINE_BACKEND" ]]; then
 fi
 if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
   CMDLINE+=" androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}"
-fi
-if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRALLOC" ]]; then
-  CMDLINE+=" androidboot.vendor.apex.com.google.cf.gralloc=${QEMU_BOOT_VENDOR_APEX_GRALLOC}"
 fi
 INITRD="$STAGE/initrd.img"
 mkdir -p "$QEMU_RUN_DIR"
@@ -205,10 +183,6 @@ EOF
 
   if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER" ]]; then
     echo "androidboot.vendor.apex.com.android.hardware.graphics.composer=${QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
-  fi
-
-  if [[ -n "$QEMU_BOOT_VENDOR_APEX_GRALLOC" ]]; then
-    echo "androidboot.vendor.apex.com.google.cf.gralloc=${QEMU_BOOT_VENDOR_APEX_GRALLOC}" >>"$QEMU_RUN_DIR/bootconfig.extra.txt"
   fi
 
   cat "$QEMU_RUN_DIR/bootconfig.extra.txt" "$STAGE/vendor_bootconfig.txt" >"$QEMU_RUN_DIR/bootconfig.combined.txt"

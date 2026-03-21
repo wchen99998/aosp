@@ -145,9 +145,10 @@ Runtime graphics selection is done later by `scripts/run_plain_qemu.sh` through
 HAL.
 
 The image ships both gralloc backends: `minigbm` (default for plain-QEMU) and
-`ranchu` (gfxstream-native, for gfxstream-capable hosts). Both are packaged as
-vendor APEXes under `com.google.cf.gralloc`, and boot-time APEX selection via
-`QEMU_BOOT_HARDWARE_GRALLOC` picks the active one.
+`ranchu` (gfxstream-native, for gfxstream-capable hosts). Both binaries are
+installed to `/vendor/bin/hw/`. The QEMU init fragment
+(`init.vendor.qemu.rc`) switches to the ranchu allocator when
+`QEMU_BOOT_HARDWARE_GRALLOC=ranchu` is set at launch.
 
 ## Stage After Build
 

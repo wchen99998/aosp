@@ -16,7 +16,6 @@ following boot properties:
 - `androidboot.hardware.hwcomposer`
 - `androidboot.vendor.apex.com.android.hardware.graphics.composer`
 - `androidboot.hardware.gralloc`
-- `androidboot.vendor.apex.com.google.cf.gralloc`
 - `androidboot.lcd_density`
 
 The guest-side init fragment promotes these values before the first
@@ -71,9 +70,11 @@ The QEMU product ships both gralloc backends:
   Requires a gfxstream/rutabaga-capable QEMU host.
 
 The active backend is selected at boot via `QEMU_BOOT_HARDWARE_GRALLOC`, which
-maps to `androidboot.hardware.gralloc`. The plain-QEMU launcher defaults to
-`minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` when running on a
-gfxstream-capable host.
+maps to `androidboot.hardware.gralloc` and then to `ro.hardware.gralloc`. The
+QEMU init fragment (`init.vendor.qemu.rc`) stops the default minigbm allocator
+and starts the ranchu one when `ro.hardware.gralloc=ranchu`. The plain-QEMU
+launcher defaults to `minigbm`. Set `QEMU_BOOT_HARDWARE_GRALLOC=ranchu` when
+running on a gfxstream-capable host.
 
 ## Why Composer Selection Is Product-Backed
 
@@ -103,17 +104,12 @@ manager:
 - `QEMU_BOOT_VENDOR_APEX_GRAPHICS_COMPOSER`
 - `QEMU_BOOT_HARDWARE_HWCOMPOSER`
 - `QEMU_BOOT_HARDWARE_GRALLOC`
-- `QEMU_BOOT_VENDOR_APEX_GRALLOC`
 - `QEMU_BOOT_LCD_DENSITY`
 
 The scripts derive `androidboot.vendor.apex.com.android.hardware.graphics.composer`
 from `QEMU_BOOT_HARDWARE_HWCOMPOSER` when no explicit APEX is provided, so the
 boot-time APEX and the selected composer backend stay aligned.
 
-The scripts derive `androidboot.vendor.apex.com.google.cf.gralloc` from
-`QEMU_BOOT_HARDWARE_GRALLOC` when no explicit APEX is provided, mapping
-`minigbm` to `com.google.cf.gralloc` and `ranchu` to
-`com.google.cf.gralloc.ranchu`.
 
 On this host, the launcher also mirrors critical early-boot args onto the
 kernel cmdline, including `androidboot.force_normal_boot`, because bootconfig
