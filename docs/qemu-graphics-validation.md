@@ -25,6 +25,11 @@ product.
   (`ps -A | grep allocator`).
 - Do not use `ranchu` gralloc on plain-QEMU — it requires a gfxstream host
   pipe and will crash SurfaceFlinger.
+- When targeting `ranchu` gralloc, confirm `/dev/goldfish_address_space` and
+  `/dev/goldfish_pipe_dprctd` are present and accessible (ueventd must set
+  `0666 system system`; SELinux must label them as `qemu_device`).
+- Confirm no SELinux denials for goldfish devices:
+  `dmesg | grep denied | grep goldfish`.
 
 ## Refresh-Policy Checks
 
@@ -39,6 +44,7 @@ product.
   problem once the overlay values above are correct.
 - Confirm `ro.surface_flinger.game_default_frame_rate_override=0` at runtime.
 - Confirm `debug.graphics.game_default_frame_rate.disabled=true` at runtime.
+- Confirm `ro.surface_flinger.max_frame_buffer_acquired_buffers=3` at runtime.
 - Treat `persist.graphics.game_default_frame_rate.enabled` as a build-time
   product property on this branch; do not rely on it as the runtime signal.
 - Do not treat `SurfaceFlinger`'s fixed `game_default_frame_rate: true` aconfig

@@ -277,7 +277,7 @@ new file mode 100644
 index 0000000..e8d9bb4
 --- /dev/null
 +++ b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,63 @@
 +#
 +# Copyright (C) 2024 The Android Open Source Project
 +#
@@ -324,6 +324,11 @@ index 0000000..e8d9bb4
 +    ro.cuttlefish.guest_profile=cuttlefish-qemu \
 +    ro.cuttlefish.adb_transport=rawTcp \
 +    ro.cuttlefish.guest_adb_port=5555
++
++# QEMU needs one extra framebuffer acquire slot to keep SurfaceFlinger from
++# stalling on the guest display path.
++PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
++    ro.surface_flinger.max_frame_buffer_acquired_buffers=3
 +
 +# ---------------------------------------------------------------------------
 +# Graphics: keep the stock cuttlefish guest HAL packaging and select the active

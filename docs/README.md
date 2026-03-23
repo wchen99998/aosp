@@ -17,3 +17,6 @@ graphics-contract flow in this workspace.
 
 - [v0.1.1 release notes](releases/v0.1.1.md)
 - [v0.1.4 release notes](releases/v0.1.4.md)
+- [v0.1.5 release notes](releases/v0.1.5.md)
+- [v0.1.6 release notes](releases/v0.1.6.md)
+- [v0.1.7 release notes](releases/v0.1.7.md)

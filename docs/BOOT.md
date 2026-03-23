@@ -154,6 +154,8 @@ Expected checks:
 - `ro.surface_flinger.game_default_frame_rate_override=0` and
   `debug.graphics.game_default_frame_rate.disabled=true` express the product
   policy on this branch.
+- for images rebuilt after the qemu framebuffer-depth change,
+  `ro.surface_flinger.max_frame_buffer_acquired_buffers=3` should be present.
 - `ro.zygote.disable_gl_preload` reflects the renderer-preload setting.
 - `ro.boot.vendor.apex.com.android.hardware.graphics.composer` matches the
   composer backend the launcher selected.

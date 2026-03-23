@@ -45,6 +45,14 @@ verified image were:
 product build.prop, but it was empty at runtime on the verified image. Treat the
 runtime properties above as the effective policy signal on this branch.
 
+The QEMU product also bakes in:
+
+- `ro.surface_flinger.max_frame_buffer_acquired_buffers=3`
+
+That is separate from the refresh-policy knobs above. It raises the
+SurfaceFlinger framebuffer acquire cap from the framework default `2` to `3`
+for the QEMU guest path.
+
 The product still uses a QEMU-only framework overlay to keep the framework
 targeted at 120 Hz by setting both
 `config_defaultPeakRefreshRate` and `config_defaultRefreshRate` to `120`, and
