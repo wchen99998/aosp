@@ -1,0 +1,132 @@
+diff --git a/src/gfxstream/guest/vulkan_enc/ResourceTracker.cpp b/src/gfxstream/guest/vulkan_enc/ResourceTracker.cpp
+index 4e0dc43..ecee522 100644
+--- a/src/gfxstream/guest/vulkan_enc/ResourceTracker.cpp
++++ b/src/gfxstream/guest/vulkan_enc/ResourceTracker.cpp
+@@ -6101,9 +6101,33 @@ VkResult ResourceTracker::on_vkQueueSubmitTemplate(void* context, VkResult input
+     std::vector<int> pre_signal_sync_fds;
+     std::vector<std::pair<zx_handle_t, zx_koid_t>> post_wait_events;
+     std::vector<int> post_wait_sync_fds;
++    int externalFenceFdToSignal = -1;
+ 
+     VkEncoder* enc = (VkEncoder*)context;
+ 
++    // Own post-submit sync objects locally so vkQueueWaitIdle() can run without mLock.
++    auto cleanupPostWaitHandles = [this, &post_wait_events, &post_wait_sync_fds,
++                                   &externalFenceFdToSignal]() {
++#ifdef VK_USE_PLATFORM_FUCHSIA
++        for (auto& [event, koid] : post_wait_events) {
++            (void)koid;
++            if (event != ZX_HANDLE_INVALID) {
++                zx_handle_close(event);
++            }
++        }
++#endif
++#if defined(VK_USE_PLATFORM_ANDROID_KHR) || DETECT_OS_LINUX
++        for (int fd : post_wait_sync_fds) {
++            if (fd >= 0) {
++                mSyncHelper->close(fd);
++            }
++        }
++        if (externalFenceFdToSignal >= 0) {
++            mSyncHelper->close(externalFenceFdToSignal);
++        }
++#endif
++    };
++
+     std::unique_lock<std::recursive_mutex> lock(mLock);
+ 
+     for (uint32_t i = 0; i < submitCount; ++i) {
+@@ -6146,17 +6170,58 @@ VkResult ResourceTracker::on_vkQueueSubmitTemplate(void* context, VkResult input
+ #endif
+ #if defined(VK_USE_PLATFORM_ANDROID_KHR) || DETECT_OS_LINUX
+                 if (semInfo.syncFd.value_or(-1) >= 0) {
+-                    post_wait_sync_fds.push_back(semInfo.syncFd.value());
++                    int syncFdDup = mSyncHelper->dup(semInfo.syncFd.value());
++                    if (syncFdDup < 0) {
++                        mesa_loge("%s: Failed to dup() signal semaphore sync fd: sterror: %s "
++                                  "errno: %d",
++                                  __func__, strerror(errno), errno);
++                    } else {
++                        post_wait_sync_fds.push_back(syncFdDup);
++                    }
+                 }
+ #endif
+             }
+         }
+     }
++#ifdef VK_USE_PLATFORM_FUCHSIA
++    for (auto& [event, koid] : post_wait_events) {
++        if (event == ZX_HANDLE_INVALID) continue;
++
++        zx_handle_t eventDup = ZX_HANDLE_INVALID;
++        zx_status_t status = zx_handle_duplicate(event, ZX_RIGHT_SAME_RIGHTS, &eventDup);
++        if (status != ZX_OK) {
++            mesa_loge("%s: Failed to duplicate signal semaphore event handle: %d", __func__,
++                      status);
++            event = ZX_HANDLE_INVALID;
++            continue;
++        }
++        event = eventDup;
++    }
++#endif
++#if defined(VK_USE_PLATFORM_ANDROID_KHR) || DETECT_OS_LINUX
++    if (fence != VK_NULL_HANDLE) {
++        auto it = info_VkFence.find(fence);
++        if (it != info_VkFence.end()) {
++            const auto& info = it->second;
++            if (info.syncFd && *info.syncFd >= 0) {
++                externalFenceFdToSignal = mSyncHelper->dup(*info.syncFd);
++                if (externalFenceFdToSignal < 0) {
++                    mesa_loge("%s: Failed to dup() queue submit fence sync fd: sterror: %s "
++                              "errno: %d",
++                              __func__, strerror(errno), errno);
++                }
++            }
++        }
++    }
++#endif
+     lock.unlock();
+ 
+     if (pre_signal_semaphores.empty()) {
+         input_result = vkQueueSubmitEnc(enc, queue, submitCount, pSubmits, fence);
+-        if (input_result != VK_SUCCESS) return input_result;
++        if (input_result != VK_SUCCESS) {
++            cleanupPostWaitHandles();
++            return input_result;
++        }
+     } else {
+         // Schedule waits on the OS external objects and
+         // signal the wait semaphores
+@@ -6190,22 +6255,11 @@ VkResult ResourceTracker::on_vkQueueSubmitTemplate(void* context, VkResult input
+             .pSignalSemaphores = pre_signal_semaphores.data()};
+         vkQueueSubmitEnc(enc, queue, 1, &submit_info, VK_NULL_HANDLE);
+         input_result = vkQueueSubmitEnc(enc, queue, submitCount, pSubmits, fence);
+-        if (input_result != VK_SUCCESS) return input_result;
+-    }
+-    lock.lock();
+-    int externalFenceFdToSignal = -1;
+-
+-#if defined(VK_USE_PLATFORM_ANDROID_KHR) || DETECT_OS_LINUX
+-    if (fence != VK_NULL_HANDLE) {
+-        auto it = info_VkFence.find(fence);
+-        if (it != info_VkFence.end()) {
+-            const auto& info = it->second;
+-            if (info.syncFd && *info.syncFd >= 0) {
+-                externalFenceFdToSignal = *info.syncFd;
+-            }
++        if (input_result != VK_SUCCESS) {
++            cleanupPostWaitHandles();
++            return input_result;
+         }
+     }
+-#endif
+     VkResult waitIdleRes = VK_SUCCESS;
+     if (externalFenceFdToSignal >= 0 || !post_wait_events.empty() || !post_wait_sync_fds.empty()) {
+         auto hostConn = ResourceTracker::threadingCallbacks.hostConnectionGetFunc();
+@@ -6238,6 +6292,7 @@ VkResult ResourceTracker::on_vkQueueSubmitTemplate(void* context, VkResult input
+ #endif
+         }
+     }
++    cleanupPostWaitHandles();
+     return waitIdleRes;
+ }
