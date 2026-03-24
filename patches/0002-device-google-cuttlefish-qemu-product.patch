@@ -10,124 +10,48 @@ index 047cc45..b08d5d4 100644
  	aosp_cf_arm64_only_phone_vendor:$(LOCAL_DIR)/vsoc_arm64_only/phone/aosp_cf_vendor.mk \
  	aosp_cf_arm64_only_phone_hwasan:$(LOCAL_DIR)/vsoc_arm64_only/phone/aosp_cf_hwasan.mk \
  	aosp_cf_arm64_minidroid:$(LOCAL_DIR)/vsoc_arm64_minidroid/aosp_cf.mk \
-diff --git a/shared/device.mk b/shared/device.mk
-index 9a49abd..9f544c0 100644
---- a/shared/device.mk
-+++ b/shared/device.mk
-@@ -181,6 +181,7 @@ PRODUCT_PACKAGES += \
- #
- # Package for AOSP QNS
- #
-+ifneq ($(TARGET_NO_TELEPHONY),true)
- PRODUCT_PACKAGES += \
-     QualifiedNetworksService
- 
-@@ -189,6 +190,7 @@ PRODUCT_PACKAGES += \
- #
- PRODUCT_PACKAGES += \
-     GbaService
+diff --git a/shared/BoardConfig.mk b/shared/BoardConfig.mk
+index d20844e..3c46d0a 100644
+--- a/shared/BoardConfig.mk
++++ b/shared/BoardConfig.mk
+@@ -197,6 +197,20 @@ BOARD_USES_SYSTEM_DLKMIMAGE := true
+ BOARD_SYSTEM_DLKMIMAGE_FILE_SYSTEM_TYPE := $(TARGET_RO_FILE_SYSTEM_TYPE)
+ TARGET_COPY_OUT_SYSTEM_DLKM := system_dlkm
+ BOARD_SYSTEM_KERNEL_MODULES := $(wildcard $(SYSTEM_DLKM_SRC)/*.ko)
++ifneq (,$(findstring _qemu,$(PRODUCT_NAME)))
++BOARD_SYSTEM_KERNEL_MODULES := $(filter-out \
++    $(SYSTEM_DLKM_SRC)/bluetooth.ko \
++    $(SYSTEM_DLKM_SRC)/btbcm.ko \
++    $(SYSTEM_DLKM_SRC)/btintel.ko \
++    $(SYSTEM_DLKM_SRC)/btqca.ko \
++    $(SYSTEM_DLKM_SRC)/btrtl.ko \
++    $(SYSTEM_DLKM_SRC)/btsdio.ko \
++    $(SYSTEM_DLKM_SRC)/btusb.ko \
++    $(SYSTEM_DLKM_SRC)/hci_uart.ko \
++    $(SYSTEM_DLKM_SRC)/hidp.ko \
++    $(SYSTEM_DLKM_SRC)/rfcomm.ko, \
++    $(BOARD_SYSTEM_KERNEL_MODULES))
 +endif
  
- #
- # Packages for testing
-@@ -209,7 +211,9 @@ PRODUCT_PACKAGES += \
- #
- # Satellite vendor service for CF
- #
-+ifneq ($(TARGET_NO_TELEPHONY),true)
- PRODUCT_PACKAGES += CFSatelliteService
-+endif
+ # Enable AVB
+ BOARD_AVB_ENABLE := true
+@@ -394,8 +408,9 @@ BOARD_BOOTCONFIG += androidboot.hardware=cutf_cvm
+ BOARD_BOOTCONFIG += \
+     kernel.vmw_vsock_virtio_transport_common.virtio_transport_max_vsock_pkt_buf_size=16384
  
- # PRODUCT_AAPT_CONFIG and PRODUCT_AAPT_PREF_CONFIG are intentionally not set to
- # pick up every density resources.
-@@ -378,9 +382,13 @@ PRODUCT_PACKAGES += $(LOCAL_DUMPSTATE_PRODUCT_PACKAGE)
- #
- # Gatekeeper
- #
-+ifeq ($(LOCAL_GATEKEEPER_PRODUCT_PACKAGES),)
-+    LOCAL_GATEKEEPER_PRODUCT_PACKAGES := \
-+        com.android.hardware.gatekeeper.cf_remote \
-+        com.android.hardware.gatekeeper.nonsecure
-+endif
- PRODUCT_PACKAGES += \
--  com.android.hardware.gatekeeper.cf_remote \
--  com.android.hardware.gatekeeper.nonsecure \
-+    $(LOCAL_GATEKEEPER_PRODUCT_PACKAGES)
++TARGET_EMULATED_CAMERA_PROVIDER_APEX ?= com.google.emulated.camera.provider.hal
+ BOARD_BOOTCONFIG += \
+-    androidboot.vendor.apex.com.google.emulated.camera.provider.hal=com.google.emulated.camera.provider.hal \
++    androidboot.vendor.apex.com.google.emulated.camera.provider.hal=$(TARGET_EMULATED_CAMERA_PROVIDER_APEX) \
  
- #
- # Oemlock
-@@ -446,10 +454,14 @@ endif
- #
- # KeyMint HAL
- #
-+ifeq ($(LOCAL_KEYMINT_PRODUCT_PACKAGES),)
-+    LOCAL_KEYMINT_PRODUCT_PACKAGES := \
-+        com.android.hardware.keymint.rust_cf_remote \
-+        com.android.hardware.keymint.rust_nonsecure \
-+        com.android.hardware.keymint.rust_cf_guest_trusty_nonsecure
-+endif
- PRODUCT_PACKAGES += \
--	com.android.hardware.keymint.rust_cf_remote \
--	com.android.hardware.keymint.rust_nonsecure \
--	com.android.hardware.keymint.rust_cf_guest_trusty_nonsecure \
-+    $(LOCAL_KEYMINT_PRODUCT_PACKAGES)
- 
- # Indicate that KeyMint includes support for the ATTEST_KEY key purpose.
- PRODUCT_COPY_FILES += \
-@@ -604,9 +616,12 @@ PRODUCT_PACKAGES += \
- $(call soong_config_set_bool,cuttlefish_config,use_pci_ids,true)
- 
- # Thread Network AIDL HAL and Demo App
-+LOCAL_ENABLE_THREADNETWORK ?= true
-+ifeq ($(LOCAL_ENABLE_THREADNETWORK),true)
- PRODUCT_PACKAGES += \
-     com.android.hardware.threadnetwork \
-     ThreadNetworkDemoApp
-+endif
- 
- PRODUCT_CHECK_VENDOR_SEAPP_VIOLATIONS := true
- 
-diff --git a/shared/graphics/device_vendor.mk b/shared/graphics/device_vendor.mk
-index d50434f..37436c8 100644
---- a/shared/graphics/device_vendor.mk
-+++ b/shared/graphics/device_vendor.mk
-@@ -50,9 +50,13 @@ endif
- #
- # Hardware Composer HAL
- #
-+ifeq ($(LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES),)
-+    LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES := \
-+        com.android.hardware.graphics.composer.drm_hwcomposer \
-+        com.android.hardware.graphics.composer.ranchu
-+endif
- PRODUCT_PACKAGES += \
--    com.android.hardware.graphics.composer.drm_hwcomposer \
--    com.android.hardware.graphics.composer.ranchu \
-+    $(LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES)
- 
- PRODUCT_VENDOR_PROPERTIES += \
-     ro.vendor.hwcomposer.pmem=/dev/block/pmem1
-diff --git a/shared/phone/device_vendor.mk b/shared/phone/device_vendor.mk
-index 678c640..a6cb1b8 100644
---- a/shared/phone/device_vendor.mk
-+++ b/shared/phone/device_vendor.mk
-@@ -37,7 +37,10 @@ $(call inherit-product, device/google/cuttlefish/shared/secure_element/device_ve
- $(call inherit-product, device/google/cuttlefish/shared/swiftshader/device_vendor.mk)
- $(call inherit-product, device/google/cuttlefish/shared/telephony/device_vendor.mk)
- $(call inherit-product, device/google/cuttlefish/shared/sensors/device_vendor.mk)
-+LOCAL_ENABLE_VIRGL ?= true
-+ifeq ($(LOCAL_ENABLE_VIRGL),true)
- $(call inherit-product, device/google/cuttlefish/shared/virgl/device_vendor.mk)
-+endif
- $(call inherit-product, device/google/cuttlefish/shared/device.mk)
- 
- # Loads the camera HAL and which set of cameras is required.
+ BOARD_INCLUDE_DTB_IN_BOOTIMG := true
+ ifndef BOARD_BOOT_HEADER_VERSION
 diff --git a/shared/config/qemu/Android.bp b/shared/config/qemu/Android.bp
 new file mode 100644
-index 0000000..b2e9384
+index 0000000..8789c6b
 --- /dev/null
 +++ b/shared/config/qemu/Android.bp
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,64 @@
 +//
 +// Copyright (C) 2024 The Android Open Source Project
 +//
@@ -154,85 +78,214 @@ index 0000000..b2e9384
 +    vendor: true,
 +    relative_install_path: "init",
 +}
-diff --git a/shared/config/qemu/overlay/frameworks/base/core/Android.bp b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
-new file mode 100644
-index 0000000..4da6982
---- /dev/null
-+++ b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
-@@ -0,0 +1,24 @@
-+//
-+// Copyright (C) 2026 The Android Open Source Project
-+//
-+// Licensed under the Apache License, Version 2.0 (the "License");
-+// you may not use this file except in compliance with the License.
-+// You may obtain a copy of the License at
-+//
-+//      http://www.apache.org/licenses/LICENSE-2.0
-+//
-+// Unless required by applicable law or agreed to in writing, software
-+// distributed under the License is distributed on an "AS IS" BASIS,
-+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+// See the License for the specific language governing permissions and
-+// limitations under the License.
 +
-+package {
-+    default_applicable_licenses: ["Android-Apache-2.0"],
++prebuilt_etc {
++    name: "device_google_cuttlefish_qemu_config_audio_policy",
++    srcs: [
++        "audio_policy/audio_policy_configuration.xml",
++        "audio_policy/primary_audio_policy_configuration.xml",
++    ],
++    dsts: [
++        "audio_policy_configuration.xml",
++        "primary_audio_policy_configuration.xml",
++    ],
++    vendor: true,
 +}
 +
-+runtime_resource_overlay {
-+    name: "cuttlefish_qemu_overlay_frameworks_base_core",
-+    soc_specific: true,
-+    sdk_version: "current",
++prebuilt_etc {
++    name: "device_google_cuttlefish_qemu_audio_service_manifest",
++    src: "audio_policy/android.hardware.audio.service-aidl.xml",
++    filename_from_src: true,
++    installable: false,
++    sub_dir: "vintf",
 +}
-diff --git a/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
++
++override_apex {
++    name: "com.google.cf.qemu.hardware.audio",
++    base: "com.android.hardware.audio",
++    prebuilts: [
++        "android.hardware.audio.service-aidl.example.rc",
++        "device_google_cuttlefish_qemu_audio_service_manifest",
++    ],
++}
++
++prebuilt_etc {
++    name: "device_google_cuttlefish_qemu_config_mapper_ranchu_manifest",
++    src: "mapper.ranchu.xml",
++    filename_from_src: true,
++    vendor: true,
++    relative_install_path: "vintf/manifest",
++}
+diff --git a/shared/config/qemu/audio_policy/android.hardware.audio.service-aidl.xml b/shared/config/qemu/audio_policy/android.hardware.audio.service-aidl.xml
 new file mode 100644
-index 0000000..f820293
+index 0000000..3e3d440
 --- /dev/null
-+++ b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
-@@ -0,0 +1,10 @@
-+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-+    package="android.cuttlefish.qemu.overlay">
-+
-+    <application android:hasCode="false" />
-+
-+    <overlay
-+      android:targetPackage="android"
-+      android:isStatic="true"
-+      android:priority="3"
-+      />
++++ b/shared/config/qemu/audio_policy/android.hardware.audio.service-aidl.xml
+@@ -0,0 +1,22 @@
++<manifest version="1.0" type="device">
++  <hal format="aidl">
++    <name>android.hardware.audio.core</name>
++    <version>3</version>
++    <fqname>IModule/default</fqname>
++  </hal>
++  <hal format="aidl">
++    <name>android.hardware.audio.core</name>
++    <version>3</version>
++    <fqname>IModule/r_submix</fqname>
++  </hal>
++  <hal format="aidl">
++    <name>android.hardware.audio.core</name>
++    <version>3</version>
++    <fqname>IConfig/default</fqname>
++  </hal>
++  <hal format="aidl">
++    <name>android.hardware.audio.effect</name>
++    <version>3</version>
++    <fqname>IFactory/default</fqname>
++  </hal>
 +</manifest>
-diff --git a/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
+diff --git a/shared/config/qemu/audio_policy/audio_policy_configuration.xml b/shared/config/qemu/audio_policy/audio_policy_configuration.xml
 new file mode 100644
-index 0000000..9007aa0
+index 0000000..4ef6d21
 --- /dev/null
-+++ b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
-@@ -0,0 +1,24 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<!--
-+/*
-+** Copyright 2026 The Android Open Source Project.
-+**
-+** Licensed under the Apache License, Version 2.0 (the "License");
-+** you may not use this file except in compliance with the License.
-+** You may obtain a copy of the License at
-+**
-+**     http://www.apache.org/licenses/LICENSE-2.0
-+**
-+** Unless required by applicable law or agreed to in writing, software
-+** distributed under the License is distributed on an "AS IS" BASIS,
-+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+** See the License for the specific language governing permissions and
-+** limitations under the License.
-+*/
++++ b/shared/config/qemu/audio_policy/audio_policy_configuration.xml
+@@ -0,0 +1,27 @@
++<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
++<!-- Copyright (C) 2026 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
 +-->
-+<resources>
-+    <!-- Treat 120 Hz as the intended policy for the QEMU validation product. -->
-+    <integer name="config_defaultRefreshRate">120</integer>
-+    <integer name="config_defaultPeakRefreshRate">120</integer>
-+</resources>
++
++<audioPolicyConfiguration version="7.0" xmlns:xi="http://www.w3.org/2001/XInclude">
++    <globalConfiguration speaker_drc_enabled="false"/>
++
++    <modules>
++        <xi:include href="primary_audio_policy_configuration.xml"/>
++        <xi:include href="r_submix_audio_policy_configuration.xml"/>
++    </modules>
++
++    <xi:include href="audio_policy_volumes.xml"/>
++    <xi:include href="default_volume_tables.xml"/>
++</audioPolicyConfiguration>
+diff --git a/shared/config/qemu/audio_policy/primary_audio_policy_configuration.xml b/shared/config/qemu/audio_policy/primary_audio_policy_configuration.xml
+new file mode 100644
+index 0000000..3e5ef69
+--- /dev/null
++++ b/shared/config/qemu/audio_policy/primary_audio_policy_configuration.xml
+@@ -0,0 +1,100 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!-- Copyright (C) 2026 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<module name="primary" halVersion="3.0">
++    <attachedDevices>
++        <item>Speaker</item>
++        <item>Built-In Mic</item>
++        <item>Telephony Tx</item>
++        <item>Telephony Rx</item>
++        <item>FM Tuner</item>
++    </attachedDevices>
++    <defaultOutputDevice>Speaker</defaultOutputDevice>
++    <mixPorts>
++        <mixPort name="primary output" role="source" flags="AUDIO_OUTPUT_FLAG_PRIMARY">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                     samplingRates="8000 11025 16000 32000 44100 48000"
++                     channelMasks="AUDIO_CHANNEL_OUT_MONO AUDIO_CHANNEL_OUT_STEREO"/>
++        </mixPort>
++        <mixPort name="compressed_offload" role="source"
++                 flags="AUDIO_OUTPUT_FLAG_DIRECT AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD AUDIO_OUTPUT_FLAG_NON_BLOCKING">
++            <profile name="" format="AUDIO_FORMAT_APE"
++                     samplingRates="44100 48000"
++                     channelMasks="AUDIO_CHANNEL_OUT_MONO AUDIO_CHANNEL_OUT_STEREO"/>
++        </mixPort>
++        <mixPort name="mmap_no_irq_out" role="source" flags="AUDIO_OUTPUT_FLAG_DIRECT AUDIO_OUTPUT_FLAG_MMAP_NOIRQ">
++             <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                      samplingRates="44100 48000"
++                      channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
++        </mixPort>
++        <mixPort name="primary input" role="sink">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                     samplingRates="8000 11025 16000 32000 44100 48000"
++                     channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
++        </mixPort>
++        <mixPort name="mmap_no_irq_in" role="sink" flags="AUDIO_INPUT_FLAG_MMAP_NOIRQ">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                             samplingRates="44100 48000"
++                             channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
++        </mixPort>
++        <mixPort name="telephony_tx" role="source">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                     samplingRates="8000 11025 16000 32000 44100 48000"
++                     channelMasks="AUDIO_CHANNEL_OUT_MONO AUDIO_CHANNEL_OUT_STEREO"/>
++        </mixPort>
++        <mixPort name="telephony_rx" role="sink">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                     samplingRates="8000 11025 16000 32000 44100 48000"
++                     channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
++        </mixPort>
++
++        <mixPort name="fm_tuner" role="sink">
++            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
++                     samplingRates="8000 11025 16000 32000 44100 48000"
++                     channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
++        </mixPort>
++   </mixPorts>
++   <devicePorts>
++        <devicePort tagName="Speaker" type="AUDIO_DEVICE_OUT_SPEAKER" role="sink">
++        </devicePort>
++        <devicePort tagName="Telephony Tx" type="AUDIO_DEVICE_OUT_TELEPHONY_TX" role="sink">
++        </devicePort>
++
++        <devicePort tagName="Built-In Mic" type="AUDIO_DEVICE_IN_BUILTIN_MIC" address="bottom" role="source">
++        </devicePort>
++        <devicePort tagName="Telephony Rx" type="AUDIO_DEVICE_IN_TELEPHONY_RX" role="source">
++        </devicePort>
++
++        <devicePort tagName="FM Tuner" type="AUDIO_DEVICE_IN_FM_TUNER" role="source">
++        </devicePort>
++    </devicePorts>
++    <routes>
++        <route type="mix" sink="Speaker"
++               sources="primary output,compressed_offload,mmap_no_irq_out"/>
++        <route type="mix" sink="primary input"
++               sources="Built-In Mic"/>
++        <route type="mix" sink="mmap_no_irq_in"
++               sources="Built-In Mic"/>
++
++        <route type="mix" sink="telephony_rx"
++               sources="Telephony Rx"/>
++        <route type="mix" sink="Telephony Tx"
++               sources="telephony_tx"/>
++
++        <route type="mix" sink="fm_tuner"
++               sources="FM Tuner"/>
++    </routes>
++</module>
 diff --git a/shared/config/qemu/init.vendor.qemu.rc b/shared/config/qemu/init.vendor.qemu.rc
 new file mode 100644
-index 0000000..e7a9644
+index 0000000..8edce88
 --- /dev/null
 +++ b/shared/config/qemu/init.vendor.qemu.rc
 @@ -0,0 +1,36 @@
@@ -272,12 +325,365 @@ index 0000000..e7a9644
 +
 +on boot
 +    stop socket_vsock_proxy
+diff --git a/shared/config/qemu/mapper.ranchu.xml b/shared/config/qemu/mapper.ranchu.xml
+new file mode 100644
+index 0000000..834e344
+--- /dev/null
++++ b/shared/config/qemu/mapper.ranchu.xml
+@@ -0,0 +1,9 @@
++<manifest version="1.0" type="device">
++    <hal format="native">
++        <name>mapper</name>
++        <version>5.0</version>
++        <interface>
++            <instance>ranchu</instance>
++        </interface>
++    </hal>
++</manifest>
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/Android.bp b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
+new file mode 100644
+index 0000000..1a590fe
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/Android.bp
+@@ -0,0 +1,24 @@
++//
++// Copyright (C) 2026 The Android Open Source Project
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package {
++    default_applicable_licenses: ["Android-Apache-2.0"],
++}
++
++runtime_resource_overlay {
++    name: "cuttlefish_qemu_overlay_frameworks_base_core",
++    soc_specific: true,
++    sdk_version: "current",
++}
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
+new file mode 100644
+index 0000000..de77e9d
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="android.cuttlefish.qemu.overlay">
++
++    <application android:hasCode="false" />
++
++    <overlay
++      android:targetPackage="android"
++      android:isStatic="true"
++      android:priority="3"
++      />
++</manifest>
+diff --git a/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
+new file mode 100644
+index 0000000..2371183
+--- /dev/null
++++ b/shared/config/qemu/overlay/frameworks/base/core/res/values/config.xml
+@@ -0,0 +1,23 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++/*
++** Copyright 2026 The Android Open Source Project.
++**
++** Licensed under the Apache License, Version 2.0 (the "License");
++** you may not use this file except in compliance with the License.
++** You may obtain a copy of the License at
++**
++**     http://www.apache.org/licenses/LICENSE-2.0
++**
++** Unless required by applicable law or agreed to in writing, software
++** distributed under the License is distributed on an "AS IS" BASIS,
++** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++** See the License for the specific language governing permissions and
++** limitations under the License.
++*/
++-->
++<resources>
++    <!-- Treat 120 Hz as the intended policy for the QEMU validation product. -->
++    <integer name="config_defaultRefreshRate">120</integer>
++    <integer name="config_defaultPeakRefreshRate">120</integer>
++</resources>
+diff --git a/shared/config/qemu/sepolicy/device.te b/shared/config/qemu/sepolicy/device.te
+new file mode 100644
+index 0000000..1902094
+--- /dev/null
++++ b/shared/config/qemu/sepolicy/device.te
+@@ -0,0 +1,2 @@
++# Goldfish virtual devices used by gfxstream/ranchu gralloc.
++type qemu_device, dev_type, mlstrustedobject;
+diff --git a/shared/config/qemu/sepolicy/domain.te b/shared/config/qemu/sepolicy/domain.te
+new file mode 100644
+index 0000000..a1b4b5a
+--- /dev/null
++++ b/shared/config/qemu/sepolicy/domain.te
+@@ -0,0 +1,3 @@
++# Gfxstream same-process HAL libraries open goldfish devices from
++# arbitrary app domains — domain-wide access is required.
++allow domain qemu_device:chr_file rw_file_perms;
+diff --git a/shared/config/qemu/sepolicy/file_contexts b/shared/config/qemu/sepolicy/file_contexts
+new file mode 100644
+index 0000000..33622bb
+--- /dev/null
++++ b/shared/config/qemu/sepolicy/file_contexts
+@@ -0,0 +1,2 @@
++/dev/goldfish_address_space  u:object_r:qemu_device:s0
++/dev/goldfish_pipe_dprctd    u:object_r:qemu_device:s0
+diff --git a/shared/device.mk b/shared/device.mk
+index 9a49abd..77526d7 100644
+--- a/shared/device.mk
++++ b/shared/device.mk
+@@ -181,6 +181,7 @@ PRODUCT_PACKAGES += \
+ #
+ # Package for AOSP QNS
+ #
++ifneq ($(TARGET_NO_TELEPHONY),true)
+ PRODUCT_PACKAGES += \
+     QualifiedNetworksService
+ 
+@@ -189,6 +190,7 @@ PRODUCT_PACKAGES += \
+ #
+ PRODUCT_PACKAGES += \
+     GbaService
++endif
+ 
+ #
+ # Packages for testing
+@@ -201,15 +203,27 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     cuttlefish_overlay_connectivity \
+     cuttlefish_overlay_frameworks_base_core \
+-    cuttlefish_overlay_nfc \
+-    cuttlefish_overlay_settings_provider \
++    cuttlefish_overlay_settings_provider
++
++LOCAL_ENABLE_NFC ?= true
++ifeq ($(LOCAL_ENABLE_NFC),true)
++PRODUCT_PACKAGES += \
++    cuttlefish_overlay_nfc
++endif
++
++LOCAL_ENABLE_UWB ?= true
++ifeq ($(LOCAL_ENABLE_UWB),true)
++PRODUCT_PACKAGES += \
+     cuttlefish_overlay_uwb \
+-    cuttlefish_overlay_uwb_gsi \
++    cuttlefish_overlay_uwb_gsi
++endif
+ 
+ #
+ # Satellite vendor service for CF
+ #
++ifneq ($(TARGET_NO_TELEPHONY),true)
+ PRODUCT_PACKAGES += CFSatelliteService
++endif
+ 
+ # PRODUCT_AAPT_CONFIG and PRODUCT_AAPT_PREF_CONFIG are intentionally not set to
+ # pick up every density resources.
+@@ -252,13 +266,17 @@ PRODUCT_COPY_FILES += \
+     frameworks/native/data/etc/android.hardware.ethernet.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.ethernet.xml \
+     frameworks/native/data/etc/android.hardware.usb.accessory.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.accessory.xml \
+     frameworks/native/data/etc/android.hardware.usb.host.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.usb.host.xml \
+-    frameworks/native/data/etc/android.hardware.uwb.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.uwb.xml \
+     frameworks/native/data/etc/android.hardware.wifi.direct.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.direct.xml \
+     frameworks/native/data/etc/android.hardware.wifi.passpoint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.passpoint.xml \
+     frameworks/native/data/etc/android.hardware.wifi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.xml \
+     frameworks/native/data/etc/android.software.credentials.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.credentials.xml \
+     frameworks/native/data/etc/android.software.ipsec_tunnels.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.ipsec_tunnels.xml \
+-    frameworks/native/data/etc/android.software.verified_boot.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.verified_boot.xml \
++    frameworks/native/data/etc/android.software.verified_boot.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.verified_boot.xml
++
++ifeq ($(LOCAL_ENABLE_UWB),true)
++PRODUCT_COPY_FILES += \
++    frameworks/native/data/etc/android.hardware.uwb.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.uwb.xml
++endif
+ 
+ ifneq ($(LOCAL_USE_VENDOR_AUDIO_CONFIGURATION),true)
+ PRODUCT_COPY_FILES += \
+@@ -378,9 +396,13 @@ PRODUCT_PACKAGES += $(LOCAL_DUMPSTATE_PRODUCT_PACKAGE)
+ #
+ # Gatekeeper
+ #
++ifeq ($(LOCAL_GATEKEEPER_PRODUCT_PACKAGES),)
++    LOCAL_GATEKEEPER_PRODUCT_PACKAGES := \
++        com.android.hardware.gatekeeper.cf_remote \
++        com.android.hardware.gatekeeper.nonsecure
++endif
+ PRODUCT_PACKAGES += \
+-  com.android.hardware.gatekeeper.cf_remote \
+-  com.android.hardware.gatekeeper.nonsecure \
++    $(LOCAL_GATEKEEPER_PRODUCT_PACKAGES)
+ 
+ #
+ # Oemlock
+@@ -446,10 +468,14 @@ endif
+ #
+ # KeyMint HAL
+ #
++ifeq ($(LOCAL_KEYMINT_PRODUCT_PACKAGES),)
++    LOCAL_KEYMINT_PRODUCT_PACKAGES := \
++        com.android.hardware.keymint.rust_cf_remote \
++        com.android.hardware.keymint.rust_nonsecure \
++        com.android.hardware.keymint.rust_cf_guest_trusty_nonsecure
++endif
+ PRODUCT_PACKAGES += \
+-	com.android.hardware.keymint.rust_cf_remote \
+-	com.android.hardware.keymint.rust_nonsecure \
+-	com.android.hardware.keymint.rust_cf_guest_trusty_nonsecure \
++    $(LOCAL_KEYMINT_PRODUCT_PACKAGES)
+ 
+ # Indicate that KeyMint includes support for the ATTEST_KEY key purpose.
+ PRODUCT_COPY_FILES += \
+@@ -561,8 +587,10 @@ PRODUCT_VENDOR_PROPERTIES += ro.vendor.wifi_impl=virt_wifi
+ endif
+ 
+ # UWB HAL
++ifeq ($(LOCAL_ENABLE_UWB),true)
+ PRODUCT_PACKAGES += com.android.hardware.uwb
+ PRODUCT_VENDOR_PROPERTIES += ro.vendor.uwb.dev=/dev/hvc9
++endif
+ 
+ # Host packages to install
+ PRODUCT_HOST_PACKAGES += socket_vsock_proxy
+@@ -579,10 +607,14 @@ PRODUCT_VENDOR_PROPERTIES += \
+ PRODUCT_VENDOR_PROPERTIES += \
+     ro.surface_flinger.supports_background_blur=1
+ 
++LOCAL_ENABLE_GAME_DEFAULT_FRAME_RATE_OVERRIDE ?= true
++
+ # Set Game Default Frame Rate
+ # See b/286084594
++ifeq ($(LOCAL_ENABLE_GAME_DEFAULT_FRAME_RATE_OVERRIDE),true)
+ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
+     ro.surface_flinger.game_default_frame_rate_override=60
++endif
+ 
+ # Disable GPU-intensive background blur for widget picker
+ PRODUCT_SYSTEM_PROPERTIES += \
+@@ -604,9 +636,12 @@ PRODUCT_PACKAGES += \
+ $(call soong_config_set_bool,cuttlefish_config,use_pci_ids,true)
+ 
+ # Thread Network AIDL HAL and Demo App
++LOCAL_ENABLE_THREADNETWORK ?= true
++ifeq ($(LOCAL_ENABLE_THREADNETWORK),true)
+ PRODUCT_PACKAGES += \
+     com.android.hardware.threadnetwork \
+     ThreadNetworkDemoApp
++endif
+ 
+ PRODUCT_CHECK_VENDOR_SEAPP_VIOLATIONS := true
+ 
+diff --git a/shared/phone/device_vendor.mk b/shared/phone/device_vendor.mk
+index 678c640..4f53b6e 100644
+--- a/shared/phone/device_vendor.mk
++++ b/shared/phone/device_vendor.mk
+@@ -37,7 +37,10 @@ $(call inherit-product, device/google/cuttlefish/shared/secure_element/device_ve
+ $(call inherit-product, device/google/cuttlefish/shared/swiftshader/device_vendor.mk)
+ $(call inherit-product, device/google/cuttlefish/shared/telephony/device_vendor.mk)
+ $(call inherit-product, device/google/cuttlefish/shared/sensors/device_vendor.mk)
++LOCAL_ENABLE_VIRGL ?= true
++ifeq ($(LOCAL_ENABLE_VIRGL),true)
+ $(call inherit-product, device/google/cuttlefish/shared/virgl/device_vendor.mk)
++endif
+ $(call inherit-product, device/google/cuttlefish/shared/device.mk)
+ 
+ # Loads the camera HAL and which set of cameras is required.
+@@ -47,8 +50,13 @@ $(call inherit-product, device/google/cuttlefish/shared/camera/config/standard.m
+ # Support mixing CF system onto previous versions of vendor
+ PRODUCT_EXTRA_VNDK_VERSIONS := 30 31 32 33 34
+ 
++ifeq ($(BOARD_HAVE_BLUETOOTH),false)
++TARGET_PRODUCT_PROP := $(LOCAL_PATH)/no_bluetooth.product.prop
++TARGET_VENDOR_PROP := $(LOCAL_PATH)/no_bluetooth.vendor.prop
++else
+ TARGET_PRODUCT_PROP := $(LOCAL_PATH)/product.prop
+ TARGET_VENDOR_PROP := $(LOCAL_PATH)/vendor.prop
++endif
+ 
+ PRODUCT_COPY_FILES += \
+     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.distinct.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.touchscreen.multitouch.distinct.xml \
+@@ -65,8 +73,11 @@ DEVICE_PACKAGE_OVERLAYS += device/google/cuttlefish/shared/phone/overlay
+ PRODUCT_PACKAGES += cuttlefish_phone_overlay_frameworks_base_core
+ 
+ # NFC AIDL HAL
++LOCAL_ENABLE_NFC ?= true
++ifeq ($(LOCAL_ENABLE_NFC),true)
+ PRODUCT_PACKAGES += \
+     com.google.cf.nfc
++endif
+ 
+ TARGET_BOARD_INFO_FILE ?= device/google/cuttlefish/shared/phone/android-info.txt
+ 
+diff --git a/shared/phone/no_bluetooth.product.prop b/shared/phone/no_bluetooth.product.prop
+new file mode 100644
+index 0000000..cf1f3a9
+--- /dev/null
++++ b/shared/phone/no_bluetooth.product.prop
+@@ -0,0 +1 @@
++# Intentionally empty for products that disable Bluetooth.
+diff --git a/shared/phone/no_bluetooth.vendor.prop b/shared/phone/no_bluetooth.vendor.prop
+new file mode 100644
+index 0000000..cf1f3a9
+--- /dev/null
++++ b/shared/phone/no_bluetooth.vendor.prop
+@@ -0,0 +1 @@
++# Intentionally empty for products that disable Bluetooth.
+diff --git a/shared/uwb/excluded_hardware.xml b/shared/uwb/excluded_hardware.xml
+new file mode 100644
+index 0000000..d1a27cc
+--- /dev/null
++++ b/shared/uwb/excluded_hardware.xml
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright 2026 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<permissions>
++    <unavailable-feature name="android.hardware.uwb" />
++</permissions>
+diff --git a/vsoc_arm64_only/BoardConfig.mk b/vsoc_arm64_only/BoardConfig.mk
+index 4f363ed..7076084 100644
+--- a/vsoc_arm64_only/BoardConfig.mk
++++ b/vsoc_arm64_only/BoardConfig.mk
+@@ -31,7 +31,9 @@ HOST_CROSS_ARCH := arm64
+ HOST_CROSS_2ND_ARCH :=
+ 
+ -include device/google/cuttlefish/shared/BoardConfig.mk
++ifneq ($(PRODUCT_NAME),aosp_cf_arm64_only_phone_qemu)
+ -include device/google/cuttlefish/shared/bluetooth/BoardConfig.mk
++endif
+ -include device/google/cuttlefish/shared/camera/BoardConfig.mk
+ -include device/google/cuttlefish/shared/gnss/BoardConfig.mk
+ -include device/google/cuttlefish/shared/graphics/BoardConfig.mk
 diff --git a/vsoc_arm64_only/phone/aosp_cf_qemu.mk b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
 new file mode 100644
-index 0000000..e8d9bb4
+index 0000000..f77ef82
 --- /dev/null
 +++ b/vsoc_arm64_only/phone/aosp_cf_qemu.mk
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,126 @@
 +#
 +# Copyright (C) 2024 The Android Open Source Project
 +#
@@ -301,9 +707,26 @@ index 0000000..e8d9bb4
 +TRUSTY_SYSTEM_VM := disabled
 +LOCAL_GATEKEEPER_PRODUCT_PACKAGES := com.android.hardware.gatekeeper.nonsecure
 +LOCAL_KEYMINT_PRODUCT_PACKAGES := com.android.hardware.keymint.rust_nonsecure
-+LOCAL_GRAPHICS_COMPOSER_PRODUCT_PACKAGES := com.android.hardware.graphics.composer.ranchu
++# Ship both composer backends and let boot-time selection pick the active one.
++# Ship both gralloc backends as standalone vendor binaries (no APEX).
++# The minigbm init_rc starts by default; init.vendor.qemu.rc switches to
++# ranchu when QEMU_BOOT_HARDWARE_GRALLOC=ranchu.
++LOCAL_GRALLOC_PRODUCT_PACKAGES := \
++    android.hardware.graphics.allocator-service.minigbm \
++    mapper.minigbm \
++    android.hardware.graphics.allocator-service.ranchu
++LOCAL_ENABLE_GAME_DEFAULT_FRAME_RATE_OVERRIDE := false
++LOCAL_SYSTEM_GAME_DEFAULT_FRAME_RATE_OVERRIDE := 0
++BOARD_HAVE_BLUETOOTH := false
 +LOCAL_ENABLE_LIGHT := false
++LOCAL_ENABLE_NFC := false
 +LOCAL_ENABLE_THREADNETWORK := false
++LOCAL_ENABLE_UWB := false
++LOCAL_USE_VENDOR_AUDIO_CONFIGURATION := true
++$(call soong_config_set_bool,bootclasspath,disable_bluetooth_mainline_module,true)
++$(call soong_config_set_bool,bootclasspath,disable_uwb_mainline_module,true)
++
++BOARD_VENDOR_SEPOLICY_DIRS += device/google/cuttlefish/shared/config/qemu/sepolicy
 +
 +$(call inherit-product, device/google/cuttlefish/vsoc_arm64_only/phone/aosp_cf.mk)
 +
@@ -325,21 +748,65 @@ index 0000000..e8d9bb4
 +    ro.cuttlefish.adb_transport=rawTcp \
 +    ro.cuttlefish.guest_adb_port=5555
 +
++# Disable the game-default-frame-rate path for QEMU validation products.
++# On this branch the runtime GameManager path is governed by
++# debug.graphics.game_default_frame_rate.disabled, while the read-only
++# ro.surface_flinger.game_default_frame_rate_override still seeds the default
++# override value.
++PRODUCT_PRODUCT_PROPERTIES += \
++    persist.graphics.game_default_frame_rate.enabled=false
++
++PRODUCT_SYSTEM_PROPERTIES += \
++    debug.graphics.game_default_frame_rate.disabled=true
++
 +# QEMU needs one extra framebuffer acquire slot to keep SurfaceFlinger from
 +# stalling on the guest display path.
 +PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 +    ro.surface_flinger.max_frame_buffer_acquired_buffers=3
 +
++# Core framework services still resolve Bluetooth and NFC API classes during
++# boot even when the runtime stacks are removed. Keep the API jars on the
++# platform bootclasspath for QEMU while leaving the Bluetooth mainline/service
++# stack disabled and the NFC stack absent from the image.
++PRODUCT_BOOT_JARS += \
++    framework-bluetooth \
++    framework-nfc
++
++# Keep the qemu product audio policy aligned with the removed Bluetooth stack.
++PRODUCT_PACKAGES += \
++    framework-bluetooth \
++    framework-nfc \
++    com.google.cf.qemu.hardware.audio \
++    device_google_cuttlefish_qemu_config_audio_policy
++
++PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/framework-bluetooth.jar \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/framework-nfc.jar \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/oat/arm64/framework-bluetooth.odex \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/oat/arm64/framework-bluetooth.vdex \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/oat/arm64/framework-nfc.odex \
++    $(TARGET_COPY_OUT_SYSTEM)/framework/oat/arm64/framework-nfc.vdex
++
++PRODUCT_COPY_FILES += \
++    frameworks/av/media/libeffects/data/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
++    frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
++    frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
++    frameworks/av/services/audiopolicy/config/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
++    frameworks/av/services/audiopolicy/config/surround_sound_configuration_5_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/surround_sound_configuration_5_0.xml \
++    frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
++    hardware/interfaces/audio/aidl/default/audio_effects_config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects_config.xml \
++    device/google/cuttlefish/shared/uwb/excluded_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/uwb_excluded_hardware.xml
++
 +# ---------------------------------------------------------------------------
-+# Graphics: keep the stock cuttlefish guest HAL packaging and select the active
-+# backend at launch time via androidboot.hardware.*. The Phase 2 mainline path
-+# now targets the ranchu Vulkan HAL paired with a gfxstream/rutabaga-capable
-+# host, while still allowing software-rendered fallback validation when the
-+# host GPU path is unavailable.
++# Graphics: do not bake in a read-only backend choice here. The actual guest
++# graphics backend is selected at launch time via androidboot.hardware.* so the
++# same image can be used with software rendering, virgl, or gfxstream-capable
++# hosts.
 +# ---------------------------------------------------------------------------
 +# ---------------------------------------------------------------------------
 +# Additional QEMU init adjustments layered on top of stock cuttlefish init
 +# ---------------------------------------------------------------------------
 +PRODUCT_PACKAGES += \
 +    cuttlefish_qemu_overlay_frameworks_base_core \
-+    device_google_cuttlefish_qemu_config_init_vendor_rc
++    device_google_cuttlefish_qemu_config_init_vendor_rc \
++    device_google_cuttlefish_qemu_config_mapper_ranchu_manifest

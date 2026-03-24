@@ -1,0 +1,23 @@
+diff --git a/service-t/src/com/android/server/ConnectivityServiceInitializer.java b/service-t/src/com/android/server/ConnectivityServiceInitializer.java
+index 5ef1aef..b643bf8 100644
+--- a/service-t/src/com/android/server/ConnectivityServiceInitializer.java
++++ b/service-t/src/com/android/server/ConnectivityServiceInitializer.java
+@@ -169,9 +169,17 @@ public final class ConnectivityServiceInitializer extends SystemService {
+     /** Return Nearby service instance or null if current SDK is lower than T */
+     private NearbyService createNearbyService(final Context context) {
+         if (!SdkLevel.isAtLeastT()) return null;
++        if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
++            Log.i(
++                    TAG,
++                    "Skipping unsupported service "
++                            + ConstantsShim.NEARBY_SERVICE
++                            + " because Bluetooth LE hardware is not present");
++            return null;
++        }
+         try {
+             return new NearbyService(context);
+-        } catch (UnsupportedOperationException e) {
++        } catch (UnsupportedOperationException | LinkageError e) {
+             // Nearby is not yet supported in all branches
+             // TODO: remove catch clause when it is available.
+             Log.i(TAG, "Skipping unsupported service " + ConstantsShim.NEARBY_SERVICE);

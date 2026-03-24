@@ -1,0 +1,63 @@
+diff --git a/service/java/com/android/server/wifi/WifiServiceImpl.java b/service/java/com/android/server/wifi/WifiServiceImpl.java
+index 385beb6..c2c1036 100644
+--- a/service/java/com/android/server/wifi/WifiServiceImpl.java
++++ b/service/java/com/android/server/wifi/WifiServiceImpl.java
+@@ -940,29 +940,41 @@ public class WifiServiceImpl extends IWifiManager.Stub {
+             updateLocationMode();
+ 
+             if (SdkLevel.isAtLeastT()) {
+-                UwbManager uwbManager =
+-                        mContext.getSystemService(UwbManager.class);
+-                if (uwbManager != null) {
+-                    uwbManager.registerAdapterStateCallback(new HandlerExecutor(new Handler(
+-                            mWifiHandlerThread.getLooper())), new UwbAdapterStateListener());
++                try {
++                    UwbManager uwbManager = mContext.getSystemService(UwbManager.class);
++                    if (uwbManager != null) {
++                        uwbManager.registerAdapterStateCallback(
++                                new HandlerExecutor(new Handler(mWifiHandlerThread.getLooper())),
++                                new UwbAdapterStateListener());
++                    }
++                } catch (LinkageError e) {
++                    Log.i(TAG, "Skipping UWB boot initialization because UWB is unavailable", e);
+                 }
+             }
+ 
+             if (SdkLevel.isAtLeastV()) {
+-                ThreadNetworkManager threadManager =
+-                        mContext.getSystemService(ThreadNetworkManager.class);
+-                if (threadManager != null) {
+-                    List<ThreadNetworkController> threadNetworkControllers =
+-                            threadManager.getAllThreadNetworkControllers();
+-                    if (threadNetworkControllers.size() > 0) {
+-                        ThreadNetworkController threadNetworkController =
+-                                threadNetworkControllers.get(0);
+-                        if (threadNetworkController != null) {
+-                            threadNetworkController.registerStateCallback(
+-                                new HandlerExecutor(new Handler(mWifiHandlerThread.getLooper())),
+-                                new ThreadStateListener());
++                try {
++                    ThreadNetworkManager threadManager =
++                            mContext.getSystemService(ThreadNetworkManager.class);
++                    if (threadManager != null) {
++                        List<ThreadNetworkController> threadNetworkControllers =
++                                threadManager.getAllThreadNetworkControllers();
++                        if (threadNetworkControllers.size() > 0) {
++                            ThreadNetworkController threadNetworkController =
++                                    threadNetworkControllers.get(0);
++                            if (threadNetworkController != null) {
++                                threadNetworkController.registerStateCallback(
++                                        new HandlerExecutor(
++                                                new Handler(mWifiHandlerThread.getLooper())),
++                                        new ThreadStateListener());
++                            }
+                         }
+                     }
++                } catch (LinkageError e) {
++                    Log.i(
++                            TAG,
++                            "Skipping Thread boot initialization because Thread is unavailable",
++                            e);
+                 }
+             }
+         }, TAG + "#handleBootCompleted");

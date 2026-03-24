@@ -1,0 +1,100 @@
+diff --git a/boot/Android.bp b/boot/Android.bp
+index f4ef1df96..95411c8e1 100644
+--- a/boot/Android.bp
++++ b/boot/Android.bp
+@@ -29,6 +29,8 @@ soong_config_module_type {
+     config_namespace: "bootclasspath",
+     bool_variables: [
+         "car_bootclasspath_fragment",
++        "disable_bluetooth_mainline_module",
++        "disable_uwb_mainline_module",
+         "nfc_apex_bootclasspath_fragment",
+         "release_crashrecovery_module",
+         "release_ondevice_intelligence_module",
+@@ -75,10 +77,6 @@ custom_platform_bootclasspath {
+             apex: "com.android.art",
+             module: "art-bootclasspath-fragment",
+         },
+-        {
+-            apex: "com.android.bt",
+-            module: "com.android.bt-bootclasspath-fragment",
+-        },
+         {
+             apex: "com.android.configinfrastructure",
+             module: "com.android.configinfrastructure-bootclasspath-fragment",
+@@ -135,10 +133,6 @@ custom_platform_bootclasspath {
+             apex: "com.android.tethering",
+             module: "com.android.tethering-bootclasspath-fragment",
+         },
+-        {
+-            apex: "com.android.uwb",
+-            module: "com.android.uwb-bootclasspath-fragment",
+-        },
+         {
+             apex: "com.android.wifi",
+             module: "com.android.wifi-bootclasspath-fragment",
+@@ -159,6 +153,26 @@ custom_platform_bootclasspath {
+                 },
+             ],
+         },
++        disable_bluetooth_mainline_module: {
++            conditions_default: {
++                fragments: [
++                    {
++                        apex: "com.android.bt",
++                        module: "com.android.bt-bootclasspath-fragment",
++                    },
++                ],
++            },
++        },
++        disable_uwb_mainline_module: {
++            conditions_default: {
++                fragments: [
++                    {
++                        apex: "com.android.uwb",
++                        module: "com.android.uwb-bootclasspath-fragment",
++                    },
++                ],
++            },
++        },
+         nfc_apex_bootclasspath_fragment: {
+             fragments: [
+                 // only used if NFC mainline is enabled.
+diff --git a/packages/SystemUI/src/com/android/systemui/dagger/FrameworkServicesModule.java b/packages/SystemUI/src/com/android/systemui/dagger/FrameworkServicesModule.java
+index 78a8a42e2..5da47c6e1 100644
+--- a/packages/SystemUI/src/com/android/systemui/dagger/FrameworkServicesModule.java
++++ b/packages/SystemUI/src/com/android/systemui/dagger/FrameworkServicesModule.java
+@@ -477,6 +477,7 @@ public class FrameworkServicesModule {
+ 
+     @Provides
+     @Singleton
++    @Nullable
+     static NearbyManager provideNearbyManager(Context context) {
+         return context.getSystemService(NearbyManager.class);
+     }
+diff --git a/packages/SystemUI/src/com/android/systemui/globalactions/ShutdownUi.java b/packages/SystemUI/src/com/android/systemui/globalactions/ShutdownUi.java
+index 4599afa66..16cd69c4c 100644
+--- a/packages/SystemUI/src/com/android/systemui/globalactions/ShutdownUi.java
++++ b/packages/SystemUI/src/com/android/systemui/globalactions/ShutdownUi.java
+@@ -46,10 +46,10 @@ import javax.inject.Inject;
+ public class ShutdownUi {
+ 
+     private Context mContext;
+-    private NearbyManager mNearbyManager;
++    @Nullable private final NearbyManager mNearbyManager;
+ 
+     @Inject
+-    public ShutdownUi(Context context, NearbyManager nearbyManager) {
++    public ShutdownUi(Context context, @Nullable NearbyManager nearbyManager) {
+         mContext = context;
+         mNearbyManager = nearbyManager;
+     }
+@@ -127,7 +127,7 @@ public class ShutdownUi {
+      * @param isReboot Whether this is a reboot or a shutdown.
+      */
+     @VisibleForTesting int getShutdownDialogContent(boolean isReboot) {
+-        if (!Flags.poweredOffFindingPlatform()) {
++        if (!Flags.poweredOffFindingPlatform() || mNearbyManager == null) {
+             return R.layout.shutdown_dialog;
+         }
+         int finderActive = mNearbyManager.getPoweredOffFindingMode();

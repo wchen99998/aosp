@@ -1,0 +1,111 @@
+diff --git a/apex/Android.bp b/apex/Android.bp
+index 1deddd9..6e8b03b 100644
+--- a/apex/Android.bp
++++ b/apex/Android.bp
+@@ -19,6 +19,30 @@ package {
+     default_applicable_licenses: ["Android-Apache-2.0"],
+ }
+ 
++soong_config_module_type {
++    name: "custom_uwb_apex",
++    module_type: "apex",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_uwb_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
++soong_config_module_type {
++    name: "custom_uwb_sdk",
++    module_type: "sdk",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_uwb_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
+ apex_defaults {
+     name: "com.android.uwb-defaults",
+     bootclasspath_fragments: ["com.android.uwb-bootclasspath-fragment"],
+@@ -39,9 +63,14 @@ apex_defaults {
+ }
+ 
+ // Mainline uwb apex module.
+-apex {
++custom_uwb_apex {
+     name: "com.android.uwb",
+     defaults: ["com.android.uwb-defaults"],
++    soong_config_variables: {
++        disable_uwb_mainline_module: {
++            enabled: false,
++        },
++    },
+     manifest: "apex_manifest.json",
+     visibility: ["//packages/modules/common/build"],
+ }
+@@ -57,8 +86,13 @@ android_app_certificate {
+     certificate: "com.android.uwb",
+ }
+ 
+-sdk {
++custom_uwb_sdk {
+     name: "uwb-module-sdk",
++    soong_config_variables: {
++        disable_uwb_mainline_module: {
++            enabled: false,
++        },
++    },
+     apexes: [
+         // Adds exportable dependencies of the APEX to the sdk,
+         // e.g. *classpath_fragments.
+@@ -71,10 +105,12 @@ soong_config_module_type {
+     module_type: "bootclasspath_fragment",
+     config_namespace: "bootclasspath",
+     bool_variables: [
++        "disable_uwb_mainline_module",
+         "release_ranging_stack",
+     ],
+     properties: [
+         "contents",
++        "enabled",
+     ],
+ }
+ 
+@@ -82,6 +118,9 @@ soong_config_module_type {
+ custom_bootclasspath_fragment {
+     name: "com.android.uwb-bootclasspath-fragment",
+     soong_config_variables: {
++        disable_uwb_mainline_module: {
++            enabled: false,
++        },
+         release_ranging_stack: {
+             contents: [
+                 "framework-uwb",
+@@ -147,16 +186,21 @@ soong_config_module_type {
+     module_type: "systemserverclasspath_fragment",
+     config_namespace: "bootclasspath",
+     bool_variables: [
++        "disable_uwb_mainline_module",
+         "release_ranging_stack",
+     ],
+     properties: [
+         "standalone_contents",
++        "enabled",
+     ],
+ }
+ 
+ custom_systemserverclasspath_fragment {
+     name: "com.android.uwb-systemserverclasspath-fragment",
+     soong_config_variables: {
++        disable_uwb_mainline_module: {
++            enabled: false,
++        },
+         release_ranging_stack: {
+             standalone_contents: [
+                 "service-uwb",

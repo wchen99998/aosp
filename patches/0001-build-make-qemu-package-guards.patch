@@ -1,8 +1,215 @@
+diff --git a/core/android_soong_config_vars.mk b/core/android_soong_config_vars.mk
+index 377d6e8..1f04c41 100644
+--- a/core/android_soong_config_vars.mk
++++ b/core/android_soong_config_vars.mk
+@@ -214,9 +214,12 @@ $(call add_soong_config_var_value,ANDROID,include_nonpublic_framework_api,true)
+ endif
+ 
+ # Add nfc build flag to soong
++LOCAL_ENABLE_NFC ?= true
++ifeq ($(LOCAL_ENABLE_NFC),true)
+ ifneq ($(RELEASE_PACKAGE_NFC_STACK),NfcNci)
+   $(call soong_config_set,bootclasspath,nfc_apex_bootclasspath_fragment,true)
+ endif
++endif
+ 
+ # Add uwb build flag to soong
+ $(call soong_config_set,bootclasspath,release_ranging_stack,$(RELEASE_RANGING_STACK))
+diff --git a/target/product/base_system.mk b/target/product/base_system.mk
+index ab4abac..0a7c50c 100644
+--- a/target/product/base_system.mk
++++ b/target/product/base_system.mk
+@@ -52,7 +52,6 @@ PRODUCT_PACKAGES += \
+     com.android.adbd \
+     com.android.adservices \
+     com.android.appsearch \
+-    com.android.bt \
+     com.android.configinfrastructure \
+     com.android.conscrypt \
+     com.android.devicelock \
+@@ -74,7 +73,6 @@ PRODUCT_PACKAGES += \
+     com.android.sdkext \
+     com.android.tethering \
+     $(RELEASE_PACKAGE_TZDATA_MODULE) \
+-    com.android.uwb \
+     com.android.virt \
+     com.android.wifi \
+     ContactsProvider \
+@@ -349,7 +347,20 @@ ifneq ($(PRODUCT_NO_DYNAMIC_SYSTEM_UPDATE),true)
+ 
+ endif
+ 
++ifneq ($(BOARD_HAVE_BLUETOOTH),false)
++PRODUCT_PACKAGES += \
++    com.android.bt
++endif
++
++LOCAL_ENABLE_UWB ?= true
++ifeq ($(LOCAL_ENABLE_UWB),true)
++PRODUCT_PACKAGES += \
++    com.android.uwb
++endif
++
++LOCAL_ENABLE_NFC ?= true
+ # Check if the build supports NFC apex or not
++ifeq ($(LOCAL_ENABLE_NFC),true)
+ ifeq ($(RELEASE_PACKAGE_NFC_STACK),NfcNci)
+     PRODUCT_PACKAGES += \
+         framework-nfc \
+@@ -358,6 +369,7 @@ else
+     PRODUCT_PACKAGES += \
+         com.android.nfcservices
+ endif
++endif
+ 
+ # Check if the build supports Profiling module
+ ifeq ($(RELEASE_PACKAGE_PROFILING_MODULE),true)
+@@ -378,9 +390,11 @@ ifneq ($(RELEASE_MOVE_VCN_TO_MAINLINE),true)
+ endif
+ 
+ ifneq (,$(RELEASE_RANGING_STACK))
++ifeq ($(LOCAL_ENABLE_UWB),true)
+     PRODUCT_PACKAGES += \
+         com.android.ranging
+ endif
++endif
+ 
+ ifeq ($(RELEASE_MEMORY_MANAGEMENT_DAEMON),true)
+   PRODUCT_PACKAGES += \
+@@ -499,7 +513,10 @@ PRODUCT_VENDOR_PROPERTIES += ro.zygote?=zygote32
+ 
+ PRODUCT_SYSTEM_PROPERTIES += debug.atrace.tags.enableflags=0
+ PRODUCT_SYSTEM_PROPERTIES += persist.traced.enable=1
+-PRODUCT_SYSTEM_PROPERTIES += ro.surface_flinger.game_default_frame_rate_override=60
++
++LOCAL_SYSTEM_GAME_DEFAULT_FRAME_RATE_OVERRIDE ?= 60
++PRODUCT_SYSTEM_PROPERTIES += \
++    ro.surface_flinger.game_default_frame_rate_override=$(LOCAL_SYSTEM_GAME_DEFAULT_FRAME_RATE_OVERRIDE)
+ 
+ # Include kernel configs.
+ PRODUCT_PACKAGES += \
+diff --git a/target/product/default_art_config.mk b/target/product/default_art_config.mk
+index f91cb07..3edb001 100644
+--- a/target/product/default_art_config.mk
++++ b/target/product/default_art_config.mk
+@@ -61,11 +61,12 @@ PRODUCT_BOOT_JARS += \
+ # PRODUCT_APEX_BOOT_JARS_FOR_SOURCE_BUILD_ONLY below.
+ # Note: core-icu4j is moved back to PRODUCT_BOOT_JARS in product_config.mk at a later stage.
+ # Note: For modules available in Q, DO NOT add new entries here.
++LOCAL_ENABLE_UWB ?= true
++LOCAL_ENABLE_NFC ?= true
+ PRODUCT_APEX_BOOT_JARS := \
+     com.android.adservices:framework-adservices \
+     com.android.adservices:framework-sdksandbox \
+     com.android.appsearch:framework-appsearch \
+-    com.android.bt:framework-bluetooth \
+     com.android.configinfrastructure:framework-configinfrastructure \
+     com.android.conscrypt:conscrypt \
+     com.android.devicelock:framework-devicelock \
+@@ -86,10 +87,21 @@ PRODUCT_APEX_BOOT_JARS := \
+     com.android.tethering:framework-connectivity \
+     com.android.tethering:framework-connectivity-t \
+     com.android.tethering:framework-tethering \
+-    com.android.uwb:framework-uwb \
+     com.android.virt:framework-virtualization \
+     com.android.wifi:framework-wifi \
+ 
++ifneq ($(BOARD_HAVE_BLUETOOTH),false)
++PRODUCT_APEX_BOOT_JARS += \
++    com.android.bt:framework-bluetooth \
++
++endif
++
++ifeq ($(LOCAL_ENABLE_UWB),true)
++PRODUCT_APEX_BOOT_JARS += \
++    com.android.uwb:framework-uwb \
++
++endif
++
+ # When crashrecovery module is ready use apex jar
+ # else put the platform jar in system
+ ifeq ($(RELEASE_CRASHRECOVERY_MODULE),true)
+@@ -114,6 +126,7 @@ else
+ endif
+ 
+ # Check if the build supports NFC apex or not
++ifeq ($(LOCAL_ENABLE_NFC),true)
+ ifeq ($(RELEASE_PACKAGE_NFC_STACK),NfcNci)
+     PRODUCT_BOOT_JARS += \
+         framework-nfc
+@@ -122,6 +135,7 @@ else
+         com.android.nfcservices:framework-nfc
+     $(call soong_config_set,bootclasspath,nfc_apex_bootclasspath_fragment,true)
+ endif
++endif
+ 
+ # Check if build supports Profiling module.
+ ifeq ($(RELEASE_PACKAGE_PROFILING_MODULE),true)
+@@ -131,10 +145,12 @@ ifeq ($(RELEASE_PACKAGE_PROFILING_MODULE),true)
+ endif
+ 
+ ifneq (,$(RELEASE_RANGING_STACK))
++ifeq ($(LOCAL_ENABLE_UWB),true)
+     PRODUCT_APEX_BOOT_JARS += \
+         com.android.uwb:framework-ranging \
+     $(call soong_config_set,bootclasspath,release_ranging_stack,true)
+ endif
++endif
+ 
+ # Check if VCN should be built into the tethering module or not
+ ifeq ($(RELEASE_MOVE_VCN_TO_MAINLINE),true)
+@@ -194,14 +210,24 @@ PRODUCT_STANDALONE_SYSTEM_SERVER_JARS := \
+ # Keep the list sorted by module names and then library names.
+ # Note: For modules available in Q, DO NOT add new entries here.
+ PRODUCT_APEX_STANDALONE_SYSTEM_SERVER_JARS := \
+-    com.android.bt:service-bluetooth \
+     com.android.devicelock:service-devicelock \
+     com.android.os.statsd:service-statsd \
+     com.android.scheduling:service-scheduling \
+     com.android.tethering:service-connectivity \
+-    com.android.uwb:service-uwb \
+     com.android.wifi:service-wifi \
+ 
++ifneq ($(BOARD_HAVE_BLUETOOTH),false)
++PRODUCT_APEX_STANDALONE_SYSTEM_SERVER_JARS += \
++    com.android.bt:service-bluetooth \
++
++endif
++
++ifeq ($(LOCAL_ENABLE_UWB),true)
++PRODUCT_APEX_STANDALONE_SYSTEM_SERVER_JARS += \
++    com.android.uwb:service-uwb \
++
++endif
++
+ # Check if build supports Profiling module.
+ ifeq ($(RELEASE_PACKAGE_PROFILING_MODULE),true)
+     PRODUCT_APEX_STANDALONE_SYSTEM_SERVER_JARS += \
+@@ -210,9 +236,11 @@ ifeq ($(RELEASE_PACKAGE_PROFILING_MODULE),true)
+ endif
+ 
+ ifneq (,$(RELEASE_RANGING_STACK))
++ifeq ($(LOCAL_ENABLE_UWB),true)
+     PRODUCT_APEX_STANDALONE_SYSTEM_SERVER_JARS += \
+         com.android.uwb:service-ranging
+ endif
++endif
+ 
+ # Overrides the (apex, jar) pairs above when determining the on-device location. The format is:
+ # <old_apex>:<old_jar>:<new_apex>:<new_jar>
 diff --git a/target/product/handheld_system.mk b/target/product/handheld_system.mk
-index 2b055c7..63d9c84 100644
+index 2b055c7..05d778f 100644
 --- a/target/product/handheld_system.mk
 +++ b/target/product/handheld_system.mk
-@@ -56,7 +56,6 @@ PRODUCT_PACKAGES += \
+@@ -36,7 +36,6 @@ PRODUCT_PACKAGES += \
+     android.software.window_magnification.prebuilt.xml \
+     BasicDreams \
+     BlockedNumberProvider \
+-    BluetoothMidiService \
+     BookmarkProvider \
+     BuiltInPrintService \
+     CalendarProvider \
+@@ -56,7 +55,6 @@ PRODUCT_PACKAGES += \
      KeyChain \
      librs_jni \
      ManagedProvisioning \
@@ -10,7 +217,7 @@ index 2b055c7..63d9c84 100644
      MtpService \
      MusicFX \
      PacProcessor \
-@@ -67,19 +66,29 @@ PRODUCT_PACKAGES += \
+@@ -67,19 +65,29 @@ PRODUCT_PACKAGES += \
      screenrecord \
      SecureElement \
      SharedStorageBackup \

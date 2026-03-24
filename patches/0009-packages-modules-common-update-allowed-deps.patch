@@ -1,0 +1,12 @@
+diff --git a/build/allowed_deps.txt b/build/allowed_deps.txt
+index b60759b..a6867db 100644
+--- a/build/allowed_deps.txt
++++ b/build/allowed_deps.txt
+@@ -231,6 +231,7 @@ codecs_g711dec(minSdkVersion:29)
+ com.android.media.audio-aconfig-cc(minSdkVersion:29)
+ com.android.media.audioserver-aconfig-cc(minSdkVersion:29)
+ com.android.nfc.flags-aconfig-java(minSdkVersion:35)
++com.android.nfc.module.flags-aconfig-java(minSdkVersion:35)
+ com.android.vcard(minSdkVersion:9)
+ com.google.android.material_material(minSdkVersion:21)
+ com.uwb.support.aliro(minSdkVersion:30)

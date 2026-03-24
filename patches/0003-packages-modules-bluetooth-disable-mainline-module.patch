@@ -1,0 +1,179 @@
+diff --git a/apex/Android.bp b/apex/Android.bp
+index 9d8393d..4920ffc 100644
+--- a/apex/Android.bp
++++ b/apex/Android.bp
+@@ -49,12 +49,65 @@ android_app_certificate {
+     certificate: "com.android.btservices",
+ }
+ 
++soong_config_module_type {
++    name: "custom_bluetooth_apex",
++    module_type: "apex",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_bluetooth_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
++soong_config_module_type {
++    name: "custom_bluetooth_bootclasspath_fragment",
++    module_type: "bootclasspath_fragment",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_bluetooth_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
++soong_config_module_type {
++    name: "custom_bluetooth_systemserverclasspath_fragment",
++    module_type: "systemserverclasspath_fragment",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_bluetooth_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
++soong_config_module_type {
++    name: "custom_bluetooth_sdk",
++    module_type: "sdk",
++    config_namespace: "bootclasspath",
++    bool_variables: [
++        "disable_bluetooth_mainline_module",
++    ],
++    properties: [
++        "enabled",
++    ],
++}
++
+ // Mainline bluetooth apex module.
+-apex {
++custom_bluetooth_apex {
+     name: "com.android.bt",
+     defaults: ["b-launched-apex-module"],
+     // TODO b/356727632: remove min_sdk_version as this is set from b-launched-apex-module
+     min_sdk_version: "35",
++    soong_config_variables: {
++        disable_bluetooth_mainline_module: {
++            enabled: false,
++        },
++    },
+     manifest: "manifest.json",
+     bootclasspath_fragments: ["com.android.bt-bootclasspath-fragment"],
+     systemserverclasspath_fragments: ["com.android.bt-systemserverclasspath-fragment"],
+@@ -91,8 +144,13 @@ apex {
+     visibility: ["//packages/modules/common/build"],
+ }
+ 
+-sdk {
++custom_bluetooth_sdk {
+     name: "bt-module-sdk",
++    soong_config_variables: {
++        disable_bluetooth_mainline_module: {
++            enabled: false,
++        },
++    },
+     apexes: [
+         // Adds exportable dependencies of the APEX to the sdk,
+         // e.g. *classpath_fragments.
+@@ -101,8 +159,13 @@ sdk {
+ }
+ 
+ // Encapsulate the contributions made by the com.android.bluetooth to the bootclasspath.
+-bootclasspath_fragment {
++custom_bluetooth_bootclasspath_fragment {
+     name: "com.android.bt-bootclasspath-fragment",
++    soong_config_variables: {
++        disable_bluetooth_mainline_module: {
++            enabled: false,
++        },
++    },
+     contents: ["framework-bluetooth"],
+     apex_available: ["com.android.bt"],
+ 
+@@ -149,8 +212,13 @@ bootclasspath_fragment {
+     },
+ }
+ 
+-systemserverclasspath_fragment {
++custom_bluetooth_systemserverclasspath_fragment {
+     name: "com.android.bt-systemserverclasspath-fragment",
++    soong_config_variables: {
++        disable_bluetooth_mainline_module: {
++            enabled: false,
++        },
++    },
+     standalone_contents: ["service-bluetooth"],
+     apex_available: ["com.android.bt"],
+ }
+diff --git a/common/Android.bp b/common/Android.bp
+index f472c9e..d23a4d1 100644
+--- a/common/Android.bp
++++ b/common/Android.bp
+@@ -22,7 +22,10 @@ java_library {
+         "bluetooth/constants/aics/GainMode.aidl",
+         "bluetooth/constants/aics/Mute.aidl",
+     ],
+-    apex_available: ["com.android.bt"],
++    apex_available: [
++        "//apex_available:platform",
++        "com.android.bt",
++    ],
+     min_sdk_version: "Tiramisu",
+     sdk_version: "module_current",
+     visibility: ["//packages/modules/Bluetooth:__subpackages__"],
+diff --git a/flags/Android.bp b/flags/Android.bp
+index 80a5789..d6d28c0 100644
+--- a/flags/Android.bp
++++ b/flags/Android.bp
+@@ -59,7 +59,10 @@ java_aconfig_library {
+     name: "bluetooth_flags_java_lib",
+     aconfig_declarations: "bluetooth_aconfig_flags",
+     visibility: ["//packages/modules/Bluetooth:__subpackages__"],
+-    apex_available: ["com.android.bt"],
++    apex_available: [
++        "//apex_available:platform",
++        "com.android.bt",
++    ],
+     libs: ["framework-configinfrastructure.stubs.module_lib"],
+     sdk_version: "module_current",
+     min_sdk_version: "Tiramisu",
+diff --git a/framework/Android.bp b/framework/Android.bp
+index 36cd936..b183365 100644
+--- a/framework/Android.bp
++++ b/framework/Android.bp
+@@ -82,7 +82,10 @@ java_sdk_library {
+         ":__subpackages__",
+     ],
+ 
+-    apex_available: ["com.android.bt"],
++    apex_available: [
++        "//apex_available:platform",
++        "com.android.bt",
++    ],
+ 
+     permitted_packages: [
+         "android.bluetooth",
+diff --git a/service/aidl/Android.bp b/service/aidl/Android.bp
+index 14980c7..29cf4db 100644
+--- a/service/aidl/Android.bp
++++ b/service/aidl/Android.bp
+@@ -17,6 +17,9 @@ java_library {
+     libs: ["framework-annotations-lib"],
+     sdk_version: "module_current",
+     min_sdk_version: "Tiramisu",
+-    apex_available: ["com.android.bt"],
++    apex_available: [
++        "//apex_available:platform",
++        "com.android.bt",
++    ],
+     visibility: ["//packages/modules/Bluetooth:__subpackages__"],
+ }
